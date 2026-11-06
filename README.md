@@ -122,4 +122,4 @@ The tests use `node --test`, need no database and never load `mysql2`. They use 
 | `connectors.test.js`, `sync.test.js` | Connectors and the sync scheduler |
 | `server.test.js` | HTTP integration: auth, roles, password login, no fallback without a loader, config |
 
-CI runs the suite on Node 18, 20 and 22.
+CI runs the suite on Node 18, 20 and 22
