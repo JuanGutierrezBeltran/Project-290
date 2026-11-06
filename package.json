@@ -1,0 +1,17 @@
+{
+  "name": "early-builders-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Early Builders / Developer Network program dashboard for Think4Ever: a Node.js service backed by MySQL, fed by HubSpot, GA4 and PostHog, with role-based access",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node -e \"process.env.AUTH_DEV_LOGIN='1'; require('./server.js').main()\"",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
