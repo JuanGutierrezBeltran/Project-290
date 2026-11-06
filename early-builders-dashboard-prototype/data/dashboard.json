@@ -1,0 +1,37 @@
+{
+  "mode": "demo",
+  "snapshotAt": "2026-11-05T18:00:00-05:00",
+  "program": {
+    "name": "Early Builders / Developer Network",
+    "signupTarget": 200,
+    "accountCapacity": 300,
+    "ceoTarget": null,
+    "country": "Colombia"
+  },
+  "funnel": [
+    { "key": "invited", "label": "Contactados", "value": 160 },
+    { "key": "sent", "label": "Correo enviado", "value": 120 },
+    { "key": "delivered", "label": "Recibido", "value": 112 },
+    { "key": "responded", "label": "Respondió", "value": 34 },
+    { "key": "accepted", "label": "Aceptó", "value": 18 },
+    { "key": "signedUp", "label": "Inscrito", "value": 6 }
+  ],
+  "builders": [
+    { "id": "EB-001", "email": "b***01@example.test", "profile": "Developer", "city": "Bogotá", "refKey": "DEMO-REF-01", "channel": "LinkedIn", "stage": "Activo", "invitedAt": "2026-10-28", "signedUpAt": "2026-10-30", "creditsGrantedAt": "2026-11-01", "credits": 2000, "lastSignIn": "2026-11-05", "signIns": 9, "projects": 1, "creditsUsed": 640, "contentUrl": "https://example.test/post/1", "contentAt": "2026-11-03" },
+    { "id": "EB-002", "email": "b***02@example.test", "profile": "Developer", "city": "Medellín", "refKey": "DEMO-REF-02", "channel": "GitHub", "stage": "En progreso", "invitedAt": "2026-10-29", "signedUpAt": "2026-11-01", "creditsGrantedAt": "2026-11-02", "credits": 2000, "lastSignIn": "2026-11-04", "signIns": 6, "projects": 1, "creditsUsed": 410, "contentUrl": "", "contentAt": "" },
+    { "id": "EB-003", "email": "b***03@example.test", "profile": "Developer", "city": "Cali", "refKey": "DEMO-REF-03", "channel": "Referido", "stage": "En progreso", "invitedAt": "2026-10-30", "signedUpAt": "2026-11-02", "creditsGrantedAt": "2026-11-03", "credits": 2000, "lastSignIn": "2026-11-05", "signIns": 4, "projects": 0, "creditsUsed": 95, "contentUrl": "https://example.test/video/3", "contentAt": "2026-11-04" },
+    { "id": "EB-004", "email": "b***04@example.test", "profile": "IT Lead", "city": "Bogotá", "refKey": "DEMO-REF-01", "channel": "LinkedIn", "stage": "Inscrito", "invitedAt": "2026-11-01", "signedUpAt": "2026-11-04", "creditsGrantedAt": "", "credits": 0, "lastSignIn": "2026-11-04", "signIns": 1, "projects": 0, "creditsUsed": 0, "contentUrl": "", "contentAt": "" },
+    { "id": "EB-005", "email": "b***05@example.test", "profile": "Developer", "city": "Pereira", "refKey": "DEMO-REF-05", "channel": "Instagram", "stage": "Invitado", "invitedAt": "2026-11-02", "signedUpAt": "", "creditsGrantedAt": "", "credits": 0, "lastSignIn": "", "signIns": 0, "projects": 0, "creditsUsed": 0, "contentUrl": "", "contentAt": "" },
+    { "id": "EB-006", "email": "b***06@example.test", "profile": "Developer", "city": "Manizales", "refKey": "DEMO-REF-06", "channel": "Referido", "stage": "Activo", "invitedAt": "2026-10-26", "signedUpAt": "2026-10-29", "creditsGrantedAt": "2026-10-30", "credits": 2000, "lastSignIn": "2026-11-01", "signIns": 7, "projects": 2, "creditsUsed": 1510, "contentUrl": "https://example.test/post/6", "contentAt": "2026-11-02" },
+    { "id": "EB-007", "email": "b***07@example.test", "profile": "Developer", "city": "Bogotá", "refKey": "DEMO-REF-07", "channel": "X", "stage": "Invitado", "invitedAt": "2026-11-03", "signedUpAt": "", "creditsGrantedAt": "", "credits": 0, "lastSignIn": "", "signIns": 0, "projects": 0, "creditsUsed": 0, "contentUrl": "", "contentAt": "" },
+    { "id": "EB-008", "email": "b***08@example.test", "profile": "Developer", "city": "Medellín", "refKey": "DEMO-REF-08", "channel": "LinkedIn", "stage": "En progreso", "invitedAt": "2026-10-27", "signedUpAt": "2026-10-31", "creditsGrantedAt": "2026-11-01", "credits": 2000, "lastSignIn": "2026-11-03", "signIns": 5, "projects": 1, "creditsUsed": 380, "contentUrl": "", "contentAt": "" }
+  ],
+  "sources": [
+    { "name": "HubSpot", "purpose": "Formulario, contactos y estado de invitación", "state": "Pendiente", "method": "API de lectura", "lastSync": "Sin conexión", "needs": "Token privado + permisos de contactos/forms/email" },
+    { "name": "PostHog", "purpose": "Sign-up, ingreso, proyecto y UTMs de primer toque", "state": "Pendiente", "method": "API de consulta", "lastSync": "Sin conexión", "needs": "API key de lectura + host + project ID" },
+    { "name": "Desarrollo / créditos", "purpose": "Fecha de carga, actividad y consumo por builder", "state": "Manual", "method": "Export diario o importación controlada", "lastSync": "Sin archivo", "needs": "Esquema y feed por cuenta" },
+    { "name": "Lista de invitaciones", "purpose": "Contactos previos al formulario y estado del correo", "state": "Manual", "method": "CSV/XLSX controlado", "lastSync": "Sin archivo", "needs": "Lista unificada con email, fecha, canal y estado" },
+    { "name": "Contenido publicado", "purpose": "Validar entregable del builder y estado activo", "state": "Manual", "method": "Registro de URL y fecha", "lastSync": "Sin archivo", "needs": "URL pública, plataforma y fecha" },
+    { "name": "GA4", "purpose": "Sesiones y UTM de landing", "state": "Pendiente", "method": "Conector existente si está disponible", "lastSync": "Sin conexión", "needs": "Property ID + cuenta de servicio" }
+  ]
+}
