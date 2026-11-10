@@ -79,7 +79,7 @@ test('channels are mapped to whole numbers', () => {
 
 const BUILDER_ROW = {
   external_id: 'abcdef12'.padEnd(64, '0'), email_domain: 'example.com', verified_on: '2026-11-04',
-  attributes: JSON.stringify({ code: 'EB-ABCDEF12', projects: 1, sign_ins: 3, last_sign_in: '2026-11-05', verified_at: '2026-11-04', credits_granted_at: '' }),
+  attributes: JSON.stringify({ code: 'EB-ABCDEF12', projects: 1, sign_ins: 3, last_sign_in: '2026-11-05', verified_at: '2026-11-04', credits_granted_at: '', active_days: ['2026-11-05', 'bad', '2026-11-01'] }),
 };
 
 test('builders come from PostHog verified people; active needs a project AND recorded content', () => {
@@ -99,6 +99,7 @@ test('builders come from PostHog verified people; active needs a project AND rec
   assert.equal(projectOnly.stage, 'En progreso');
   assert.equal(Core.isActive(projectOnly), false, 'project_created alone is not enough');
   assert.equal(projectOnly.creditsGrantedAt, '');
+  assert.deepEqual(projectOnly.activeDays, ['2026-11-01', '2026-11-05']);
 });
 
 test('Date objects are refused instead of being shifted across timezones', () => {

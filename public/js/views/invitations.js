@@ -1,9 +1,7 @@
 
-// Invitations / enrollment: the funnel (HubSpot sessions and form submissions, PostHog
-// registration started, account created and account verified, plus the person-level cross
-// form -> verified account by HMAC email hash). Conversion is shown only inside one source
-// or across the person match; other steps say "sources not matched". Also: funnel shape,
-// stage detail, landing channels and the real invitation states from HubSpot marketing emails
+// Enrollment: the referral funnel (emails sent, delivered, opened, invitee signed up),
+// the PostHog product path (through people with a project), and a HubSpot-only landing
+// strip. Conversion stays inside one cohort. Also landing channels and invitation states
 // (or "pending source" while HUBSPOT_INVITE_EMAIL_IDS / EMAIL_HASH_KEY are missing).
 (function (root) {
   'use strict';
@@ -14,6 +12,7 @@
     hubspot: ['pill-success', 'src.hubspot'],
     posthog: ['pill-success', 'src.posthog'],
     cross: ['pill-lime', 'src.cross'],
+    invite: ['pill-success', 'src.invite'],
   };
   const STATES = ['invited', 'sent', 'delivered', 'replied', 'closed', 'accepted', 'enrolled', 'opened'];
   const LOW_STEP = 40;
@@ -40,26 +39,34 @@
   function render(el, ctx) {
     const { data, T, ui, Core, t } = ctx;
     const esc = ui.esc;
-    const steps = Core.funnelSteps(data.funnel);
-    const insights = Core.funnelInsights(data.funnel);
+    const referralRaw = Array.isArray(data.referral) && data.referral.length ? data.referral : Core.referralSteps(data.invitations);
+    const steps = Core.funnelSteps(referralRaw);
+    const product = Core.funnelSteps(Core.productSteps(data.funnel, data.summary));
+    const acquire = Core.funnelSteps(Core.acquisitionSteps(data.funnel));
+    const insights = Core.funnelInsights(referralRaw);
     const byKey = (key) => steps.find((s) => s.key === key);
-    const first = steps[0] ? steps[0].value : null;
-    const verified = byKey('accountVerified');
-    const cross = byKey('formToVerified');
+    const sent = byKey('emailsSent');
+    const signed = byKey('inviteSignedUp');
+    const verified = (Array.isArray(data.funnel) ? data.funnel : []).find((s) => s.key === 'accountVerified');
+    const withProject = product.find((s) => s.key === 'withProject');
+    const pending = steps.some((s) => s.reason === 'pending');
     const drop = insights.largestDrop;
-    const labelOf = (key) => { const s = byKey(key); return s ? ui.funnelLabel(s) : key; };
+    const labelOf = (list, key) => {
+      const s = list.find((step) => step.key === key);
+      return s ? ui.funnelLabel(s) : key;
+    };
     const total = String(steps.length).padStart(2, '0');
     const srcPill = (step) => {
       const p = SOURCE_PILL[step.source];
       return p ? ui.pill(p[0], t(p[1])) : ui.pill('pill-neutral', t('state.unknown'));
     };
-    const countOf = (step) => (step.reason === 'pending' ? '—' : ui.num(step.value));
+    const countOf = (step) => (!step || step.reason === 'pending' ? '—' : ui.num(step.value));
 
     const cards = steps.map((step, i) => {
       const na = i > 0 && step.conversion === null;
       const low = !na && i > 0 && step.conversion < LOW_STEP;
-      const conv = i ? ui.funnelRate(step, i) : '100%';
-      const width = i ? (na ? 0 : Math.min(100, step.conversion)) : 100;
+      const conv = i ? ui.funnelRate(step, i) : (pending ? ui.funnelRate(step, 1) : '100%');
+      const width = i ? (na ? 0 : Math.min(100, step.conversion)) : (pending ? 0 : 100);
       return `<li class="inv-stage">
         <div class="inv-stage-top"><span class="inv-step">${String(i + 1).padStart(2, '0')} / ${total}</span></div>
         <div class="inv-stage-name">${esc(ui.funnelLabel(step))}<span class="inv-stage-alias">${esc(step.key)}</span></div>
@@ -70,19 +77,21 @@
       </li>`;
     }).join('');
 
-    const shape = steps.map((step) => {
+    const shape = product.map((step) => {
       const width = step.value > 0 ? Math.min(100, Math.max(1.5, step.percentOfSource)) : 0;
       return `<div class="inv-frow"><span class="inv-flabel">${esc(ui.funnelLabel(step))}</span>
       <span class="inv-fbar" role="img" aria-label="${esc(`${ui.funnelLabel(step)} ${countOf(step)}`)}"><i class="${step.key === 'accountVerified' ? 'is-mid' : ''}" style="width:${width.toFixed(1)}%"></i></span>
       <span class="inv-fcount">${esc(countOf(step))}</span><span class="inv-frate">${step.reason === 'pending' ? '—' : `${step.percentOfSource}%`}</span></div>`;
     }).join('');
 
-    const tableRows = steps.map((step, i) => `<tr><td class="td-id">${esc(ui.funnelLabel(step))}</td><td class="mono td-num">${esc(countOf(step))}</td><td class="mono td-num">${esc(ui.funnelRate(step, i))}</td><td class="mono td-num">${step.reason === 'pending' ? '—' : `${step.percentOfSource}%`}</td></tr>`).join('');
+    const tableRows = product.map((step, i) => `<tr><td class="td-id">${esc(ui.funnelLabel(step))}</td><td class="mono td-num">${esc(countOf(step))}</td><td class="mono td-num">${esc(ui.funnelRate(step, i))}</td><td class="mono td-num">${step.reason === 'pending' ? '—' : `${step.percentOfSource}%`}</td></tr>`).join('');
 
-    const dropText = drop ? `${labelOf(drop.from)} → ${labelOf(drop.to)}` : '—';
-    let overallFoot = '—';
-    if (cross && cross.reason === 'pending') overallFoot = t('inv.sum.overall.pending');
-    else if (cross) overallFoot = `${ui.num(cross.value)} / ${ui.num(cross.baseValue)}`;
+    const sessions = acquire[0];
+    const forms = acquire[1];
+    const formRate = forms ? ui.funnelRate(forms, acquire.indexOf(forms)) : '—';
+    const dropText = drop ? `${labelOf(steps, drop.from)} → ${labelOf(steps, drop.to)}` : '—';
+    const sentCount = pending ? null : (sent ? sent.value : null);
+    const signedCount = pending ? null : (signed ? signed.value : null);
     const notes = [1, 2, 3, 4].map((n) => `<li${n === 1 ? ' class="is-first"' : ''}><div><b>${T(`inv.o${n}.t`)}</b><p>${T(`inv.o${n}.d`)}</p></div></li>`).join('');
 
     el.innerHTML = `<div class="inv-page">
@@ -90,20 +99,21 @@
         <div><h2 class="section-title">${T('inv.title')}</h2><p class="page-lede">${T('inv.lede')}</p></div>
       </header>
       <section class="inv-summary">
-        <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.invited')}</span>${ui.icon('list')}</div><div class="stat-value">${esc(ui.num(first))}</div><div class="inv-sum-foot">${T('inv.sum.invited.f')}</div></div>
-        <div class="inv-sum is-hero"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.signed')}</span>${ui.icon('userCheck')}</div><div class="stat-value hero">${esc(ui.num(verified ? verified.value : null))}</div><div class="inv-sum-foot">${T('inv.sum.signed.f')}</div></div>
-        <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.overall')}</span>${ui.icon('percent')}</div><div class="stat-value">${insights.overall === null ? '—' : `${esc(insights.overall)}%`}</div><div class="inv-sum-foot mono">${esc(overallFoot)}</div></div>
-        <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.drop')}</span>${ui.icon('trendDown')}</div><div class="stat-value">${drop ? `${esc(drop.conversion)}%` : '—'}</div><div class="inv-sum-foot">${esc(dropText)}</div></div>
+        <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.sent')}</span>${ui.icon('list')}</div><div class="stat-value">${esc(ui.num(sentCount))}</div><div class="inv-sum-foot">${T('inv.sum.sent.f')}</div></div>
+        <div class="inv-sum is-hero"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.enrolled')}</span>${ui.icon('userCheck')}</div><div class="stat-value hero">${esc(ui.num(signedCount))}</div><div class="inv-sum-foot">${T('inv.sum.enrolled.f')}</div></div>
+        <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.verified')}</span>${ui.icon('percent')}</div><div class="stat-value">${esc(ui.num(verified ? verified.value : null))}</div><div class="inv-sum-foot">${T('inv.sum.verified.f')}</div></div>
+        <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.project')}</span>${ui.icon('cube')}</div><div class="stat-value">${esc(ui.num(withProject ? withProject.value : null))}</div><div class="inv-sum-foot">${T('inv.sum.project.f')}</div></div>
       </section>
       <section aria-labelledby="inv-stages-title">
         <div class="section-head tight"><h2 class="section-title" id="inv-stages-title">${T('inv.stages')}</h2></div>
         <ol class="inv-stages">${cards || `<li class="inv-stage is-empty">${ui.dash()}</li>`}</ol>
+        ${drop ? `<div class="inv-drop">${ui.icon('alert')}<span>${T('inv.sum.drop')}: ${esc(dropText)} · ${esc(drop.conversion)}%</span></div>` : ''}
       </section>
       <section class="inv-row">
         <div class="card">
           <div class="card-header"><div><div class="card-title">${T('inv.shape')}</div><div class="card-sub">${T('inv.shape.sub')}</div></div></div>
           <div class="inv-funnel">${shape}</div>
-          ${drop ? `<div class="inv-drop">${ui.icon('alert')}<span>${T('inv.sum.drop')}: ${esc(dropText)} · ${esc(drop.conversion)}%</span></div>` : ''}
+          <div class="inv-acquire">${T('f.acquire')}: <b>${esc(ui.num(sessions ? sessions.value : null))}</b> · ${T('funnel.formSignups')}: <b>${esc(ui.num(forms ? forms.value : null))}</b> · ${esc(formRate)}</div>
         </div>
         <div class="card inv-card-pad0">
           <div class="card-header"><div><div class="card-title">${T('inv.detail')}</div><div class="card-sub">${T('inv.detail.sub')}</div></div></div>

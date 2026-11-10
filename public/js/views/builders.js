@@ -8,7 +8,7 @@
 
   // Same order as the server allowlist; only fields actually present in the
   // payload are exported, so the CSV never contains more than the role receives.
-  const FIELD_ORDER = ['id', 'email', 'profile', 'city', 'refKey', 'channel', 'stage', 'invitedAt', 'signedUpAt', 'creditsGrantedAt', 'credits', 'lastSignIn', 'signIns', 'projects', 'creditsUsed', 'contentUrl', 'contentAt', 'contentPlatform'];
+  const FIELD_ORDER = ['id', 'email', 'profile', 'city', 'refKey', 'channel', 'stage', 'invitedAt', 'signedUpAt', 'creditsGrantedAt', 'credits', 'lastSignIn', 'signIns', 'projects', 'activeDays', 'creditsUsed', 'contentUrl', 'contentAt', 'contentPlatform'];
   const st = { q: '', stage: 'all', sort: { key: 'id', dir: 'asc' } };
 
   function sortValue(b, key, ui) {
@@ -38,6 +38,40 @@
     return Boolean(ctx.data.access && ctx.data.access.canEditContent) && typeof ctx.saveContent === 'function';
   }
 
+  function rosterRow(b, days, ctx) {
+    const { ui, Core, t } = ctx;
+    const esc = ui.esc;
+    const worked = Core.workedDays(b, days);
+    const on = worked.filter((day) => day.on);
+    const cells = worked.map((day) => `<i class="${day.on ? 'on' : ''}" title="${esc(day.date)}"></i>`).join('');
+    const names = on.map((day) => ui.shortDate(day.date)).filter(Boolean).join(', ');
+    const label = on.length ? t('bl.days.aria', { days: names }) : t('bl.days.none');
+    const project = Core.hasProject(b);
+    return `<tr>
+      <td><div class="fu-builder"><span class="fu-av" aria-hidden="true">${esc(ui.initials(b.id))}</span><div><div class="fu-name">${esc(b.id)}</div>${b.email ? `<div class="fu-id">${esc(b.email)}</div>` : ''}</div></div></td>
+      <td>${ui.stagePill(b.stage)}</td>
+      <td class="mono td-start">${b.signedUpAt ? esc(ui.shortDate(b.signedUpAt)) : '—'}</td>
+      <td>${ui.pill(project ? 'pill-success' : 'pill-neutral', t(project ? 'st.created' : 'bl.project.none'))}</td>
+      <td><div class="work"><span class="work-track" role="img" aria-label="${esc(label)}">${cells}</span><span class="work-num">${on.length}/${days.length}</span></div></td>
+    </tr>`;
+  }
+
+  function rosterHtml(ctx) {
+    const { data, T, ui } = ctx;
+    const esc = ui.esc;
+    const days = ctx.Core.activityWindow(data.snapshotAt);
+    const scale = days.map((day) => `<span title="${esc(day)}">${esc(day.slice(8))}</span>`).join('');
+    const body = data.builders.map((b) => rosterRow(b, days, ctx)).join('');
+    return `<section class="card table-card bl-roster" aria-labelledby="bl-roster-title">
+      <div class="card-header"><div><h2 class="card-title" id="bl-roster-title">${T('bl.roster')} <span class="nav-count mono">${esc(ui.num(data.builders.length))}</span></h2><div class="card-sub">${T('bl.roster.sub')}</div></div></div>
+      <div class="table-scroll"><table>
+        <caption class="sr-only">${T('bl.roster')}</caption>
+        <thead><tr><th scope="col">${T('th.builder')}</th><th scope="col">${T('th.stage')}</th><th scope="col">${T('th.start')}</th><th scope="col">${T('th.project')}</th><th scope="col"><span class="th-worked">${T('th.worked')}</span><span class="work-scale" aria-hidden="true">${scale}</span></th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
+    </section>`;
+  }
+
   function rowHtml(b, ctx) {
     const { ui, Core, t } = ctx;
     const esc = ui.esc;
@@ -47,6 +81,8 @@
       const used = Number(b.creditsUsed) || 0;
       const p = Math.min(100, pct(used, credits));
       creditCell = `<div class="bl-credits"><div class="bl-credits-num">${esc(ui.num(used))} <span>/ ${esc(ui.num(credits))}</span></div><div class="bl-credit-bar" role="img" aria-label="${p}%"><i class="${p >= 85 ? 'hi' : ''}" style="width:${p}%"></i></div></div>`;
+    } else if (b.creditsGrantedAt) {
+      creditCell = `<div class="right"><span class="mono">${esc(ui.shortDate(b.creditsGrantedAt))}</span><div class="bl-email">${esc(t('bl.credits.granted'))}</div></div>`;
     } else {
       creditCell = `<div class="right">${ui.dash()}</div>`;
     }
@@ -238,6 +274,7 @@
         <div class="bl-dist-bar" aria-hidden="true">${bar}</div>
         <div class="bl-dist-legend">${legend}</div>
       </section>
+      ${rosterHtml(ctx)}
       <section class="card bl-content-card" id="bl-content-panel" aria-live="polite" hidden></section>
       <section class="card table-card bl-table-card" aria-labelledby="bl-table-title">
         <div class="card-header"><div><div class="card-title" id="bl-table-title">${T('bl.table.title')}</div><div class="card-sub">${T('bl.table.sub')}</div></div>

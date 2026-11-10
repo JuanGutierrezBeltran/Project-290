@@ -53,6 +53,99 @@
       }).length,
       missingContent: granted.filter((b) => hasProject(b) && !isPublished(b)).length,
       missingProject: granted.filter((b) => !hasProject(b)).length,
+      withProject: list.filter(hasProject).length,
+      ...recentActivity(list, snapshotAt),
+    };
+  }
+
+  // Invitees only. Signed up = an invitee with a verified account (enrolled).
+  // Pending while the invitation source is not available, so the UI never shows a fake 0.
+  function referralSteps(invitations) {
+    const inv = invitations && typeof invitations === 'object' ? invitations : {};
+    const live = inv.available === true;
+    const spec = [
+      ['emailsSent', 'sent', null],
+      ['delivered', 'delivered', 'emailsSent'],
+      ['opened', 'opened', 'delivered'],
+      ['inviteSignedUp', 'enrolled', 'opened'],
+    ];
+    return spec.map(([key, field, base]) => {
+      const step = { key, source: 'invite', base, value: live ? (Number(inv[field]) || 0) : 0 };
+      if (!live) step.pending = true;
+      return step;
+    });
+  }
+
+  function stepsByKey(funnel, keys) {
+    const byKey = new Map((Array.isArray(funnel) ? funnel : []).map((s) => [s && s.key, s]));
+    return keys.filter((key) => byKey.get(key)).map((key) => byKey.get(key));
+  }
+
+  // PostHog only, in order. "Has a project" is verified people with at least one project.
+  function productSteps(funnel, summary) {
+    const steps = stepsByKey(funnel, ['registrationStarted', 'accountCreated', 'accountVerified']);
+    steps.push({
+      key: 'withProject',
+      source: 'posthog',
+      base: 'accountVerified',
+      value: Number(summary && summary.withProject) || 0,
+    });
+    return steps;
+  }
+
+  // HubSpot only. Never compared with PostHog sign-ups.
+  function acquisitionSteps(funnel) {
+    return stepsByKey(funnel, ['sessions', 'formSignups']);
+  }
+
+  // The 14 calendar days ending on the snapshot's Bogotá date, oldest first.
+  function activityWindow(snapshotAt, days) {
+    const count = typeof days === 'number' ? days : ACTIVATION_DAYS;
+    const cutoff = new Date(snapshotAt);
+    if (!snapshotAt || Number.isNaN(cutoff.getTime()) || count < 1) return [];
+    const bogota = new Date(cutoff.getTime() - 5 * 3600000);
+    const end = bogota.toISOString().slice(0, 10);
+    const [year, month, day] = end.split('-').map(Number);
+    const out = [];
+    for (let i = count - 1; i >= 0; i -= 1) {
+      out.push(new Date(Date.UTC(year, month - 1, day - i)).toISOString().slice(0, 10));
+    }
+    return out;
+  }
+
+  // Days the person actually used the tool. activeDays is the recorded set (sign-in or
+  // project created). When that set has not been synced, the only known day is lastSignIn.
+  // A sign-in count is never spread across the calendar.
+  function workedDays(builder, windowDays) {
+    const days = Array.isArray(windowDays) ? windowDays : [];
+    const recorded = builder && Array.isArray(builder.activeDays);
+    const known = new Set();
+    if (recorded) {
+      for (const value of builder.activeDays) {
+        const day = String(value || '').slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(day)) known.add(day);
+      }
+    } else if (builder && /^\d{4}-\d{2}-\d{2}$/.test(String(builder.lastSignIn || ''))) {
+      known.add(builder.lastSignIn);
+    }
+    return days.map((date) => ({ date, on: known.has(date) }));
+  }
+
+  // Accounts are people with a verified sign-up. Active means they signed in or
+  // created a project on one of the last `days` calendar days. The count is never
+  // guessed from a sign-in total.
+  function recentActivity(builders, snapshotAt, days) {
+    const list = Array.isArray(builders) ? builders : [];
+    const windowDays = activityWindow(snapshotAt, typeof days === 'number' ? days : 7);
+    const accounts = list.filter((b) => b && b.signedUpAt);
+    const active = windowDays.length
+      ? accounts.filter((b) => workedDays(b, windowDays).some((day) => day.on)).length
+      : null;
+    const total = accounts.length;
+    return {
+      recentActive: active,
+      recentAccounts: total,
+      recentPercent: active == null || total === 0 ? null : Math.round(active / total * 100),
     };
   }
 
@@ -214,6 +307,12 @@
     isPublished,
     isActive,
     summarizeBuilders,
+    referralSteps,
+    productSteps,
+    acquisitionSteps,
+    activityWindow,
+    workedDays,
+    recentActivity,
     followUps,
     stagesOf,
     filterBuilders,

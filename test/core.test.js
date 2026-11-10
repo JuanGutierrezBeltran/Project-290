@@ -50,6 +50,10 @@ test('summarizeBuilders reproduces the overview cards for the fixture', () => {
     within14: 5,
     missingContent: 2,
     missingProject: 1,
+    withProject: 4,
+    recentActive: 6,
+    recentAccounts: 6,
+    recentPercent: 100,
   });
 });
 
@@ -57,6 +61,37 @@ test('summarizeBuilders only counts builders with a credit grant', () => {
   const s = Core.summarizeBuilders([{ projects: 1, contentUrl: 'u', contentAt: 'd', creditsGrantedAt: '' }], SNAPSHOT);
   assert.equal(s.active, 0);
   assert.equal(s.granted, 0);
+});
+
+test('activityWindow is the 14 Bogotá dates ending on the snapshot', () => {
+  const days = Core.activityWindow(SNAPSHOT);
+  assert.equal(days.length, 14);
+  assert.equal(days[0], '2026-10-23');
+  assert.equal(days[13], '2026-11-05');
+  assert.deepEqual(Core.activityWindow('not-a-date'), []);
+});
+
+test('workedDays marks recorded days and never spreads a sign-in count', () => {
+  const days = Core.activityWindow(SNAPSHOT);
+  const marked = Core.workedDays({ activeDays: ['2026-11-05', '2026-10-01', 'nope'], signIns: 9, lastSignIn: '2026-11-04' }, days);
+  assert.deepEqual(marked.filter((d) => d.on).map((d) => d.date), ['2026-11-05']);
+  const fallback = Core.workedDays({ lastSignIn: '2026-11-04', signIns: 6 }, days);
+  assert.deepEqual(fallback.filter((d) => d.on).map((d) => d.date), ['2026-11-04']);
+  const none = Core.workedDays({ activeDays: [], lastSignIn: '2026-11-04', signIns: 6 }, days);
+  assert.equal(none.some((d) => d.on), false);
+});
+
+test('recentActivity is the share of verified accounts that used the product in the last 7 days', () => {
+  const recent = Core.recentActivity(fixture.builders, SNAPSHOT, 7);
+  assert.equal(recent.recentAccounts, 6);
+  assert.equal(recent.recentActive, 6);
+  assert.equal(recent.recentPercent, 100);
+  const quiet = Core.recentActivity([
+    { signedUpAt: '2026-10-01', activeDays: ['2026-10-02'], lastSignIn: '2026-11-05', signIns: 9 },
+    { signedUpAt: '', activeDays: ['2026-11-05'] },
+  ], SNAPSHOT, 7);
+  assert.deepEqual(quiet, { recentActive: 0, recentAccounts: 1, recentPercent: 0 });
+  assert.equal(Core.recentActivity([], 'not-a-date').recentPercent, null);
 });
 
 test('followUps lists granted, not-yet-active builders in order', () => {
@@ -92,6 +127,30 @@ test('filterBuilders works on pseudonymous records without email', () => {
 
 test('stagesOf returns unique stages in first-seen order', () => {
   assert.deepEqual(Core.stagesOf(fixture.builders), ['Activo', 'En progreso', 'Inscrito', 'Invitado']);
+});
+
+test('referralSteps converts only along the invitee list and stays pending without the source', () => {
+  const live = Core.funnelSteps(Core.referralSteps(fixture.invitations));
+  assert.deepEqual(live.map((s) => s.key), ['emailsSent', 'delivered', 'opened', 'inviteSignedUp']);
+  assert.deepEqual(live.map((s) => s.conversion), [null, 90, 50, 33]);
+  assert.deepEqual(live.map((s) => s.reason), [null, null, null, null]);
+  const pending = Core.funnelSteps(Core.referralSteps({ available: false, sent: 20, enrolled: 3 }));
+  assert.equal(pending[0].value, 0);
+  assert.equal(pending[3].reason, 'pending');
+  assert.equal(pending[3].conversion, null);
+});
+
+test('productSteps stays inside PostHog and counts verified people with a project', () => {
+  const summary = Core.summarizeBuilders(fixture.builders, SNAPSHOT);
+  const steps = Core.funnelSteps(Core.productSteps(fixture.funnel, summary));
+  assert.deepEqual(steps.map((s) => [s.key, s.value, s.conversion]), [
+    ['registrationStarted', 30, null],
+    ['accountCreated', 12, 40],
+    ['accountVerified', 6, 50],
+    ['withProject', 4, 67],
+  ]);
+  const acquire = Core.funnelSteps(Core.acquisitionSteps(fixture.funnel));
+  assert.deepEqual(acquire.map((s) => [s.key, s.conversion]), [['sessions', null], ['formSignups', 25]]);
 });
 
 test('funnelSteps only converts within one source or across the person-level match', () => {

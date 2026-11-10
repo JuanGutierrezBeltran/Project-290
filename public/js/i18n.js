@@ -1,9 +1,10 @@
-// Spanish (default) / English dictionaries and the translate helper.
+// English (default) / Spanish dictionaries and the translate helper.
 // Exposes window.EB.i18n. The chosen language persists in localStorage.
 (function (root) {
   'use strict';
   const EB = root.EB = root.EB || {};
   const LS_KEY = 't4_lang';
+  const MIGRATED_KEY = 't4_lang_migrated';
 
   const DICT = {
     es: {
@@ -19,6 +20,7 @@
       'toast.export.t': 'CSV exportado', 'toast.export.x': '{n} filas, solo con los campos que tu rol recibe.',
       'stage.active': 'Activo', 'stage.progress': 'En progreso', 'stage.enrolled': 'Inscrito', 'stage.invited': 'Invitado',
       'funnel.sessions': 'Sesiones en la landing', 'funnel.formSignups': 'Envíos del formulario', 'funnel.signedUp': 'Registros en la plataforma',
+      'funnel.emailsSent': 'Emails enviados', 'funnel.delivered': 'Recibidos', 'funnel.opened': 'Abiertos', 'funnel.inviteSignedUp': 'Inscritos', 'funnel.withProject': 'Con proyecto',
       'funnel.registrationStarted': 'Inicio de registro', 'funnel.accountCreated': 'Cuenta creada', 'funnel.accountVerified': 'Cuenta verificada', 'funnel.formToVerified': 'Formulario → cuenta verificada',
       'state.connected': 'Conectada', 'state.manual': 'Manual', 'state.pending': 'Pendiente', 'state.error': 'Error', 'state.unknown': 'Desconocido',
       'st.created': 'Creado', 'st.published': 'Publicado', 'st.pending': 'Pendiente',
@@ -26,10 +28,14 @@
       'channels.title': 'Canales de la landing', 'channels.sub': 'Sesiones y contactos por fuente de tráfico · HubSpot', 'channels.channel': 'Canal', 'channels.sessions': 'Sesiones', 'channels.contacts': 'Contactos',
       'ov.targets': 'Metas del programa', 'ov.period': 'Periodo',
       'tc.close': 'Meta de cierre Developer Network', 'tc.close.label': 'Cuentas verificadas · PostHog', 'tc.close.of': 'de la meta', 'tc.close.togo': 'restantes', 'tc.close.aria': 'Progreso hacia la meta de cierre',
+      'tc.active': 'Activas en los últimos 7 días', 'tc.active.of': '{n} de {accounts} cuentas', 'tc.active.note': 'Ingresaron o crearon un proyecto', 'tc.active.aria': 'Cuentas activas en los últimos 7 días', 'tc.active.none': 'No hay cuentas verificadas para medir',
       'tc.cap': 'Capacidad aprobada Early Builders', 'tc.cap.label': 'Cuentas aprobadas', 'tc.cap.flag': 'No es la meta de cierre', 'tc.cap.used': 'con créditos asignados', 'tc.cap.aria': 'Capacidad en uso',
       'tc.ceo': 'Meta del CEO', 'tc.ceo.flag': 'Aún no confirmada', 'tc.ceo.note': 'No hay una meta del CEO confirmada. La meta de cierre sigue siendo la meta de trabajo.',
       'pill.progress': 'En curso', 'pill.ontarget': 'En meta', 'pill.pending': 'Pendiente',
-      'f.title': 'Embudo de inscripción', 'f.sub': 'Conversión solo dentro de la misma fuente o cruzada por persona', 'f.go': 'Ver embudo',
+      'f.title': 'Embudo de referidos', 'f.sub': 'Conversión solo entre las mismas personas', 'f.go': 'Ver embudo',
+      'f.referral': 'Embudo de referidos', 'f.referral.sub': 'Misma lista de invitados: enviado, recibido, abierto, cuenta verificada', 'f.referral.pending': 'Los emails de invitación aún no están conectados',
+      'f.product': 'Camino en el producto', 'f.product.sub': 'PostHog, de persona a persona', 'f.acquire': 'Landing',
+      'f.verifiedBeside': 'Cuentas verificadas en total: {n} / {target}',
       'f.notCrossed': 'fuentes no cruzadas', 'f.pending': 'pendiente', 'src.cross': 'Cruce por email (HMAC)',
       'f.h.stage': 'Etapa', 'f.h.share': 'Parte de su fuente', 'f.h.count': 'Total', 'f.h.step': 'Paso',
       'f.overall': 'Formulario → cuenta verificada', 'f.signed': 'Cuenta verificada alimenta la meta de cierre',
@@ -44,8 +50,11 @@
       'th.profile': 'Perfil', 'th.signup': 'Registro', 'th.credits': 'Créditos usados / asignados', 'th.activity': 'Proyectos · ingresos', 'th.ref': 'RefKey · canal', 'th.count': 'Total', 'th.step': 'Paso',
       'risk.ok': 'En curso', 'risk.risk': 'En riesgo', 'risk.late': 'Pasó el día 14', 'track.aria': 'Día {d} de 14',
       'bl.lede': 'Cada builder del programa: etapa, actividad, consumo de créditos y contenido.',
+      'bl.roster': 'Actividad de builders', 'bl.roster.sub': 'La fecha de inicio es el registro verificado. Un día marcado es un ingreso o un proyecto creado en los 14 días anteriores a la última sincronización. Los días no se estiman.',
+      'bl.project.none': 'Sin proyecto', 'th.start': 'Inicio', 'th.worked': 'Días de trabajo',
+      'bl.days.aria': 'Trabajó {days}', 'bl.days.none': 'Sin días registrados en los últimos 14',
       'bl.none.title': 'Aún no hay cuentas verificadas', 'bl.none.sub': 'Cada persona con account_verified en PostHog (sin cuentas internas) aparece aquí con un código seudónimo y el dominio de su correo.',
-      'bl.credits.pending': 'Pendiente: sin evento de créditos',
+      'bl.credits.pending': 'Pendiente: sin evento de créditos', 'bl.credits.granted': 'Fecha de carga · uso sin sincronizar',
       'bl.content.add': 'Registrar contenido', 'bl.content.edit': 'Editar contenido', 'bl.content.open': 'Abrir enlace', 'bl.content.title': 'Contenido publicado de {code}',
       'bl.content.hint': 'Activo = proyecto creado + contenido con URL y fecha de publicación.', 'bl.content.url': 'URL pública', 'bl.content.platform': 'Plataforma (opcional)', 'bl.content.date': 'Fecha de publicación',
       'bl.content.save': 'Guardar', 'bl.content.cancel': 'Cancelar', 'bl.content.saved': 'Contenido guardado', 'bl.content.saved.x': 'Se registró el contenido de {code}.',
@@ -59,16 +68,17 @@
       'bl.last': 'Último ingreso', 'bl.projects': 'proyectos', 'bl.signins': 'ingresos',
       'bl.empty.title': 'Ningún builder coincide con esos filtros', 'bl.empty.sub': 'Prueba otro término o restablece el filtro de etapa.', 'bl.empty.reset': 'Restablecer filtros',
       'bl.legend.mask': 'Solo el dominio del correo; el código es un seudónimo', 'bl.legend.dash': '— = aún no disponible, nunca estimado',
-      'inv.title': 'Embudo de inscripción', 'inv.lede': 'Cada tarjeta muestra el total de la etapa, su conversión respecto a la anterior y de qué fuente viene.',
-      'inv.sum.invited': 'Sesiones en la landing', 'inv.sum.invited.f': 'HubSpot · desde el lanzamiento', 'inv.sum.signed': 'Cuentas verificadas', 'inv.sum.signed.f': 'PostHog · meta de 200 · sin cuentas internas', 'inv.sum.overall': 'Formulario → cuenta verificada', 'inv.sum.overall.pending': 'Cruce pendiente (EMAIL_HASH_KEY)', 'inv.sum.drop': 'Mayor caída',
-      'inv.stages': 'Etapas del embudo', 'inv.step': 'Conv. etapa', 'inv.base': 'Base',
-      'inv.shape': 'Forma del embudo', 'inv.shape.sub': 'Ancho relativo a la primera etapa de cada fuente', 'inv.detail': 'Detalle por etapa', 'inv.detail.sub': 'Conversión por etapa y parte de su fuente', 'inv.th.cumul': '% fuente',
-      'src.hubspot': 'HubSpot', 'src.posthog': 'PostHog',
+      'inv.title': 'Embudo del programa', 'inv.lede': 'Empieza por los emails enviados. Cada tasa compara la etapa con la anterior, sobre las mismas personas.',
+      'inv.sum.sent': 'Emails enviados', 'inv.sum.sent.f': 'Destinatarios con envío · HubSpot', 'inv.sum.enrolled': 'Inscritos', 'inv.sum.enrolled.f': 'Invitados con cuenta verificada',
+      'inv.sum.verified': 'Cuentas verificadas', 'inv.sum.verified.f': 'Todas · meta de 200 · sin cuentas internas', 'inv.sum.project': 'Con proyecto', 'inv.sum.project.f': 'Cuentas verificadas con al menos un proyecto', 'inv.sum.drop': 'Mayor caída',
+      'inv.stages': 'Emails enviados hasta la inscripción', 'inv.step': 'Conv. etapa', 'inv.base': 'Base',
+      'inv.shape': 'Camino en el producto', 'inv.shape.sub': 'Ancho relativo al inicio de registro · PostHog', 'inv.detail': 'Detalle del producto', 'inv.detail.sub': 'Conversión por etapa, solo PostHog', 'inv.th.cumul': '% de su fuente',
+      'src.hubspot': 'HubSpot', 'src.posthog': 'PostHog', 'src.invite': 'Invitados',
       'inv.order': 'Cómo se mide cada etapa', 'inv.order.sub': 'Origen y reglas de cada cifra',
-      'inv.o1.t': 'Sesiones y formulario: HubSpot', 'inv.o1.d': 'Sesiones de la landing por fuente de tráfico y altas del formulario, sin dominios internos, desde el lanzamiento hasta la última sincronización.',
-      'inv.o2.t': 'Registro, cuenta creada y verificada: PostHog', 'inv.o2.d': 'Primer registration_started, account_created y account_verified de cada persona, sin cuentas internas ni de prueba. La meta de 200 cuenta account_verified.',
-      'inv.o3.t': 'Formulario → cuenta verificada: cruce por persona', 'inv.o3.d': 'Se compara el hash HMAC del correo en ambos sistemas (nunca el correo). Solo cuenta a quienes tienen correo en PostHog; sin EMAIL_HASH_KEY queda pendiente.',
-      'inv.o4.t': 'Sin conversión entre fuentes', 'inv.o4.d': 'HubSpot y PostHog no se dividen entre sí: esas etapas dicen "fuentes no cruzadas". La conversión real entre sistemas es solo la del cruce por persona.',
+      'inv.o1.t': 'Emails enviados hasta la inscripción', 'inv.o1.d': 'Enviado, recibido y abierto son destinatarios de los emails de invitación. Inscrito es un invitado cuyo hash de correo coincide con una cuenta verificada.',
+      'inv.o2.t': 'Camino en el producto: PostHog', 'inv.o2.d': 'Primer registration_started, account_created y account_verified de cada persona, sin cuentas internas ni de prueba. Con proyecto cuenta personas verificadas con al menos un project_created. La meta de 200 cuenta account_verified.',
+      'inv.o3.t': 'Landing: solo HubSpot', 'inv.o3.d': 'Sesiones y envíos del formulario se comparan entre sí. No se dividen por las inscripciones de PostHog.',
+      'inv.o4.t': 'El cruce por persona no es un paso del email', 'inv.o4.d': 'Formulario → cuenta verificada sigue siendo el hash HMAC del correo (nunca el correo). Sin EMAIL_HASH_KEY queda pendiente. No se usa como tasa del embudo de emails.',
       'inv.rule': 'Estados de invitación', 'inv.rule.sub': 'Emails de marketing de HubSpot · por destinatario',
       'inv.rule.pending.t': 'Pendiente de fuente.', 'inv.rule.pending.d': 'Faltan HUBSPOT_INVITE_EMAIL_IDS (los emails de invitación), EMAIL_HASH_KEY o el permiso content del token de HubSpot. Mientras tanto no se muestra ni se estima ningún estado.',
       'inv.rule.live.t': 'Datos reales por destinatario.', 'inv.rule.live.d': 'Respondió = hs_sales_email_last_replied posterior al primer envío. Cerrado = rebote o baja sin respuesta. Aceptó = invitado que envió el formulario. Inscrito = invitado con cuenta verificada (cruce HMAC).',
@@ -124,6 +134,7 @@
       'toast.export.t': 'CSV exported', 'toast.export.x': '{n} rows, only with the fields your role receives.',
       'stage.active': 'Active', 'stage.progress': 'In progress', 'stage.enrolled': 'Enrolled', 'stage.invited': 'Invited',
       'funnel.sessions': 'Landing sessions', 'funnel.formSignups': 'Form submissions', 'funnel.signedUp': 'Platform sign-ups',
+      'funnel.emailsSent': 'Emails sent', 'funnel.delivered': 'Delivered', 'funnel.opened': 'Opened', 'funnel.inviteSignedUp': 'Signed up', 'funnel.withProject': 'Has a project',
       'funnel.registrationStarted': 'Registration started', 'funnel.accountCreated': 'Account created', 'funnel.accountVerified': 'Account verified', 'funnel.formToVerified': 'Form → verified account',
       'state.connected': 'Connected', 'state.manual': 'Manual', 'state.pending': 'Pending', 'state.error': 'Error', 'state.unknown': 'Unknown',
       'st.created': 'Created', 'st.published': 'Published', 'st.pending': 'Pending',
@@ -131,10 +142,14 @@
       'channels.title': 'Landing channels', 'channels.sub': 'Sessions and contacts per traffic source · HubSpot', 'channels.channel': 'Channel', 'channels.sessions': 'Sessions', 'channels.contacts': 'Contacts',
       'ov.targets': 'Program targets', 'ov.period': 'Period',
       'tc.close': 'Developer Network close target', 'tc.close.label': 'Verified accounts · PostHog', 'tc.close.of': 'of target', 'tc.close.togo': 'to go', 'tc.close.aria': 'Close target progress',
+      'tc.active': 'Active in the last 7 days', 'tc.active.of': '{n} of {accounts} accounts', 'tc.active.note': 'Signed in or created a project', 'tc.active.aria': 'Accounts active in the last 7 days', 'tc.active.none': 'No verified accounts to measure',
       'tc.cap': 'Early Builders approved capacity', 'tc.cap.label': 'Approved accounts', 'tc.cap.flag': 'Not the close target', 'tc.cap.used': 'with credits granted', 'tc.cap.aria': 'Capacity in use',
       'tc.ceo': 'CEO target', 'tc.ceo.flag': 'Not confirmed yet', 'tc.ceo.note': 'No CEO target has been confirmed. The close target remains the working goal until it is.',
       'pill.progress': 'In progress', 'pill.ontarget': 'On target', 'pill.pending': 'Pending',
-      'f.title': 'Enrollment funnel', 'f.sub': 'Conversion only within one source or matched per person', 'f.go': 'View funnel',
+      'f.title': 'Referral funnel', 'f.sub': 'Conversion only across the same people', 'f.go': 'View funnel',
+      'f.referral': 'Referral funnel', 'f.referral.sub': 'Same invite list: sent, delivered, opened, verified account', 'f.referral.pending': 'Invitation emails are not connected yet',
+      'f.product': 'Product path', 'f.product.sub': 'PostHog, person by person', 'f.acquire': 'Landing',
+      'f.verifiedBeside': 'All verified accounts: {n} / {target}',
       'f.notCrossed': 'sources not matched', 'f.pending': 'pending', 'src.cross': 'Email match (HMAC)',
       'f.h.stage': 'Stage', 'f.h.share': 'Share of its source', 'f.h.count': 'Count', 'f.h.step': 'Step',
       'f.overall': 'Form → verified account', 'f.signed': 'Verified accounts feed the close target',
@@ -149,8 +164,11 @@
       'th.profile': 'Profile', 'th.signup': 'Sign-up', 'th.credits': 'Credits used / granted', 'th.activity': 'Projects · sign-ins', 'th.ref': 'RefKey · channel', 'th.count': 'Count', 'th.step': 'Step',
       'risk.ok': 'On track', 'risk.risk': 'At risk', 'risk.late': 'Past Day 14', 'track.aria': 'Day {d} of 14',
       'bl.lede': 'Every builder in the program: stage, activity, credit burn and content.',
+      'bl.roster': 'Builder activity', 'bl.roster.sub': 'Start date is the verified sign-up. A marked day is a sign-in or a project created in the 14 days before the last sync. Days are not estimated.',
+      'bl.project.none': 'No project', 'th.start': 'Start', 'th.worked': 'Days worked',
+      'bl.days.aria': 'Worked {days}', 'bl.days.none': 'No recorded days in the last 14',
       'bl.none.title': 'No verified accounts yet', 'bl.none.sub': 'Every person with account_verified in PostHog (internal accounts excluded) shows up here with a pseudonymous code and their email domain.',
-      'bl.credits.pending': 'Pending: no credit event',
+      'bl.credits.pending': 'Pending: no credit event', 'bl.credits.granted': 'Grant date · usage not synced',
       'bl.content.add': 'Record content', 'bl.content.edit': 'Edit content', 'bl.content.open': 'Open link', 'bl.content.title': 'Published content for {code}',
       'bl.content.hint': 'Active = project created + content with URL and publication date.', 'bl.content.url': 'Public URL', 'bl.content.platform': 'Platform (optional)', 'bl.content.date': 'Publication date',
       'bl.content.save': 'Save', 'bl.content.cancel': 'Cancel', 'bl.content.saved': 'Content saved', 'bl.content.saved.x': 'Content recorded for {code}.',
@@ -164,16 +182,17 @@
       'bl.last': 'Last sign-in', 'bl.projects': 'projects', 'bl.signins': 'sign-ins',
       'bl.empty.title': 'No builders match those filters', 'bl.empty.sub': 'Try a different search term or reset the stage filter.', 'bl.empty.reset': 'Reset filters',
       'bl.legend.mask': 'Email domain only; the code is a pseudonym', 'bl.legend.dash': '— = not yet available, never estimated',
-      'inv.title': 'Enrollment funnel', 'inv.lede': 'Each card shows the stage total, its step conversion from the previous stage and which source it comes from.',
-      'inv.sum.invited': 'Landing sessions', 'inv.sum.invited.f': 'HubSpot · since launch', 'inv.sum.signed': 'Verified accounts', 'inv.sum.signed.f': 'PostHog · 200 target · internal accounts excluded', 'inv.sum.overall': 'Form → verified account', 'inv.sum.overall.pending': 'Match pending (EMAIL_HASH_KEY)', 'inv.sum.drop': 'Largest drop',
-      'inv.stages': 'Funnel stages', 'inv.step': 'Step conv.', 'inv.base': 'Base',
-      'inv.shape': 'Funnel shape', 'inv.shape.sub': 'Width relative to the first stage of each source', 'inv.detail': 'Stage detail', 'inv.detail.sub': 'Step conversion and share of its source', 'inv.th.cumul': '% source',
-      'src.hubspot': 'HubSpot', 'src.posthog': 'PostHog',
+      'inv.title': 'Program funnel', 'inv.lede': 'Starts with emails sent. Each rate compares a stage with the one before it, on the same people.',
+      'inv.sum.sent': 'Emails sent', 'inv.sum.sent.f': 'Recipients with a send · HubSpot', 'inv.sum.enrolled': 'Signed up', 'inv.sum.enrolled.f': 'Invitees with a verified account',
+      'inv.sum.verified': 'Verified accounts', 'inv.sum.verified.f': 'All of them · 200 target · internal accounts excluded', 'inv.sum.project': 'Has a project', 'inv.sum.project.f': 'Verified accounts with at least one project', 'inv.sum.drop': 'Largest drop',
+      'inv.stages': 'Emails sent through sign-up', 'inv.step': 'Step conv.', 'inv.base': 'Base',
+      'inv.shape': 'Product path', 'inv.shape.sub': 'Width relative to registration started · PostHog', 'inv.detail': 'Product detail', 'inv.detail.sub': 'Step conversion, PostHog only', 'inv.th.cumul': '% of its source',
+      'src.hubspot': 'HubSpot', 'src.posthog': 'PostHog', 'src.invite': 'Invitees',
       'inv.order': 'How each stage is measured', 'inv.order.sub': 'Origin and rules of every figure',
-      'inv.o1.t': 'Sessions and form: HubSpot', 'inv.o1.d': 'Landing sessions per traffic source and form submissions, internal domains excluded, from launch to the last sync.',
-      'inv.o2.t': 'Registration, account created and verified: PostHog', 'inv.o2.d': 'First registration_started, account_created and account_verified per person, excluding internal and test accounts. The 200 target counts account_verified.',
-      'inv.o3.t': 'Form → verified account: person-level match', 'inv.o3.d': 'The HMAC hash of the email is compared in both systems (never the email). Only people with an email in PostHog can match; without EMAIL_HASH_KEY it stays pending.',
-      'inv.o4.t': 'No conversion across sources', 'inv.o4.d': 'HubSpot and PostHog are never divided by each other: those steps say "sources not matched". The only cross-system conversion is the person-level match.',
+      'inv.o1.t': 'Emails sent through sign-up', 'inv.o1.d': 'Sent, delivered and opened are recipients of the invitation emails. Signed up is an invitee whose email hash matches a verified account.',
+      'inv.o2.t': 'Product path: PostHog', 'inv.o2.d': 'First registration_started, account_created and account_verified per person, excluding internal and test accounts. Has a project counts verified people with at least one project_created. The 200 target counts account_verified.',
+      'inv.o3.t': 'Landing: HubSpot only', 'inv.o3.d': 'Sessions and form submissions are compared with each other. They are not divided by PostHog sign-ups.',
+      'inv.o4.t': 'The person match is not an email step', 'inv.o4.d': 'Form → verified account is still the HMAC hash of the email (never the email). Without EMAIL_HASH_KEY it stays pending. It is not used as a rate on the email funnel.',
       'inv.rule': 'Invitation states', 'inv.rule.sub': 'HubSpot marketing emails · per recipient',
       'inv.rule.pending.t': 'Source pending.', 'inv.rule.pending.d': 'HUBSPOT_INVITE_EMAIL_IDS (the invitation emails), EMAIL_HASH_KEY or the content scope on the HubSpot token is missing. Until then no state is shown or estimated.',
       'inv.rule.live.t': 'Real per-recipient data.', 'inv.rule.live.d': 'Replied = hs_sales_email_last_replied after the first send. Closed = bounced or unsubscribed without a reply. Accepted = invitee who submitted the form. Enrolled = invitee with a verified account (HMAC match).',
@@ -218,10 +237,17 @@
     }
   };
 
-  let lang = 'es';
+  let lang = 'en';
   try {
-    const saved = localStorage.getItem(LS_KEY);
-    if (saved && Object.prototype.hasOwnProperty.call(DICT, saved)) lang = saved;
+    // One-time move off the old Spanish default. A later choice in the
+    // language control still persists.
+    if (localStorage.getItem(MIGRATED_KEY) !== 'en') {
+      localStorage.setItem(LS_KEY, 'en');
+      localStorage.setItem(MIGRATED_KEY, 'en');
+    } else {
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved && Object.prototype.hasOwnProperty.call(DICT, saved)) lang = saved;
+    }
   } catch (e) { /* storage unavailable: keep default */ }
 
   function t(key, vars) {

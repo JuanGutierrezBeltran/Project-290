@@ -46,7 +46,13 @@ for (const role of ['executive', 'marketing']) {
     assert.equal(out.builders, undefined);
     assert.equal(out.restricted, true);
     assert.equal(out.summary.active, 2);
+    assert.equal(out.summary.withProject, 4);
     assert.equal(out.funnel.length, 6);
+    assert.equal(out.referral.length, 4);
+    assert.equal(out.referral[0].key, 'emailsSent');
+    assert.equal(out.referral[0].value, 20);
+    assert.equal(out.referral[3].key, 'inviteSignedUp');
+    assert.equal(out.referral[3].value, 3);
     assert.equal(out.program.signupTarget, 200);
     const json = JSON.stringify(out);
     assert.equal(json.includes('@example.test'), false);
@@ -72,6 +78,13 @@ test('invitation states are sent only with the Invitations view, as aggregates',
     assert.equal(out.invitations.enrolled, 3);
   }
   assert.equal(access.projectDashboard(clone(), 'executive').invitations, undefined);
+  const hidden = clone();
+  hidden.invitations.available = false;
+  hidden.invitations.sent = 20;
+  const pending = access.projectDashboard(hidden, 'executive').referral;
+  assert.equal(pending[0].pending, true);
+  assert.equal(pending[0].value, 0);
+  assert.equal(pending[3].value, 0);
   const data = clone();
   data.invitations.recipients = ['x@example.test'];
   assert.equal('recipients' in access.projectDashboard(data, 'marketing').invitations, false);
