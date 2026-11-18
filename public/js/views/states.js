@@ -1,8 +1,7 @@
 
 // State screens: Data Unavailable (in-shell, with retry and attempt log),
-// Sign In (full page; shared-password access form when ACCESS_PASSWORD is set,
-// dev-login role links when the server offers them, SSO marked planned),
-// Forbidden (403) and Auth not configured (503).
+// Sign In (full page; Microsoft button only — token exchange lives on the
+// Think4ever app, not in this view), Forbidden (403) and Auth not configured (503).
 (function (root) {
   'use strict';
   const EB = root.EB = root.EB || {};
@@ -10,28 +9,21 @@
   const t = (k, v) => EB.i18n.t(k, v);
   const T = (k, v) => ui().esc(t(k, v));
 
-  // Display-only mirror of lib/access.js. The server is the source of truth.
-  const ROLE_MATRIX = [
-    { id: 'admin', views: ['overview', 'builders', 'invitations', 'sources'], records: 'full' },
-    { id: 'program_manager', views: ['overview', 'builders', 'invitations', 'sources'], records: 'full' },
-    { id: 'research', views: ['overview', 'builders', 'invitations', 'sources'], records: 'pseudonymous' },
-    { id: 'executive', views: ['overview'], records: 'none' },
-    { id: 'marketing', views: ['overview', 'invitations'], records: 'none' },
-  ];
   const VIEWS = ['overview', 'builders', 'invitations', 'sources'];
 
-  function roleLabel(id, fallback) {
-    const key = `role.${id}`;
-    const label = t(key);
-    return label === key ? (fallback || id) : label;
+  function themeButton() {
+    return `<button type="button" class="btn btn-secondary btn-sm theme-toggle" data-theme-toggle aria-pressed="false"><span class="theme-toggle-label"></span></button>`;
   }
 
   function topHtml() {
     const lang = EB.i18n.getLang();
     return `<header class="login-top">
       <div class="login-brand"><span class="logo-mark">${ui().icon('logo')}</span>Think4Ever <span class="sub">Builders</span></div>
-      <div class="login-lang" role="group" aria-label="${T('ctl.language')}">
-        <button type="button" data-lang="es" aria-pressed="${lang === 'es'}">ES</button><button type="button" data-lang="en" aria-pressed="${lang === 'en'}">EN</button>
+      <div class="login-tools">
+        ${themeButton()}
+        <div class="login-lang" role="group" aria-label="${T('ctl.language')}">
+          <button type="button" data-lang="es" aria-pressed="${lang === 'es'}">ES</button><button type="button" data-lang="en" aria-pressed="${lang === 'en'}">EN</button>
+        </div>
       </div>
     </header>`;
   }
@@ -109,137 +101,23 @@
     });
   }
 
-  function passwordFormHtml(roles, scopeOf) {
+  function signIn(el, info, onLang) {
     const u = ui();
-    const esc = u.esc;
-    const options = roles.map((r, i) => `<label class="role-option pw-role${i === 0 ? ' is-checked' : ''}"><input type="radio" name="role" value="${esc(r.id)}"${i === 0 ? ' checked' : ''}><span class="role-name">${esc(roleLabel(r.id, r.label))}</span><span class="role-scope">${esc(scopeOf(r.id))}</span></label>`).join('');
-    return `<form class="pw-form" novalidate>
-              <div><div class="field-legend">${T('si.pw.title')}</div><p class="login-hint">${T('si.pw.lede')}</p></div>
-              <div><label class="pw-label" for="access-password">${T('si.pw.password')}</label><input class="pw-input" id="access-password" name="password" type="password" autocomplete="current-password" maxlength="256" required></div>
-              <fieldset class="pw-roles"><legend class="pw-label">${T('si.pw.role')}</legend><div class="role-list">${options}</div></fieldset>
-              <p class="pw-error" role="alert" hidden></p>
-              <button type="submit" class="btn btn-primary login-submit">${u.icon('login')}<span>${T('si.pw.submit')}</span></button>
-            </form>`;
-  }
-
-  function wirePasswordForm(el, onSignedIn) {
-    const form = el.querySelector('.pw-form');
-    if (!form) return;
-    const input = form.querySelector('#access-password');
-    const errorEl = form.querySelector('.pw-error');
-    const submit = form.querySelector('button[type="submit"]');
-    const showError = (text) => { errorEl.textContent = text; errorEl.hidden = false; };
-    const setBusy = (busy) => {
-      submit.disabled = busy;
-      if (busy) submit.setAttribute('aria-busy', 'true'); else submit.removeAttribute('aria-busy');
-    };
-
-    form.addEventListener('change', (e) => {
-      if (!e.target || e.target.name !== 'role') return;
-      form.querySelectorAll('.pw-role').forEach((label) => label.classList.toggle('is-checked', label.querySelector('input').checked));
-    });
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (submit.disabled) return;
-      const password = input.value;
-      const role = form.querySelector('input[name="role"]:checked');
-      if (!password) { showError(t('si.pw.err.empty')); input.focus(); return; }
-      if (!role) { showError(t('si.pw.err.role')); return; }
-      errorEl.hidden = true;
-      setBusy(true);
-
-      let res;
-      try {
-        res = await fetch('auth/password-login', {
-          method: 'POST',
-          credentials: 'same-origin',
-          cache: 'no-store',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ password, role: role.value }),
-        });
-      } catch (err) {
-        setBusy(false);
-        showError(t('si.pw.err.network'));
-        return;
-      }
-
-      if (res.ok) {
-        input.value = '';
-        if (typeof onSignedIn === 'function') onSignedIn(); else location.reload();
-        return;
-      }
-      setBusy(false);
-      if (res.status === 401) {
-        input.value = '';
-        input.focus();
-        showError(t('si.pw.err.password'));
-        return;
-      }
-      if (res.status === 429) {
-        const seconds = Number(res.headers.get('Retry-After'));
-        const minutes = Math.max(1, Math.ceil((Number.isFinite(seconds) && seconds > 0 ? seconds : 900) / 60));
-        showError(t('si.pw.err.limit', { m: minutes }));
-        return;
-      }
-      if (res.status === 400) {
-        const body = await res.json().catch(() => ({}));
-        if (body && body.error === 'unknown_role') { showError(t('si.pw.err.role')); return; }
-      }
-      showError(t('si.pw.err.generic', { s: res.status }));
-    });
-  }
-
-  function signIn(el, info, onLang, onSignedIn) {
-    const u = ui();
-    const esc = u.esc;
-    const roles = info && Array.isArray(info.roles) ? info.roles : [];
-    const devRoles = info && info.devLogin ? roles : [];
-    const pwRoles = info && info.passwordLogin ? roles : [];
-    const scopeOf = (id) => {
-      const m = ROLE_MATRIX.find((r) => r.id === id);
-      return m ? `${t(`si.rec.${m.records}`)} · ${t('si.views', { n: m.views.length })}` : '';
-    };
-    const roleLinks = devRoles.map((r) => `<a class="role-option" href="auth/dev-login?role=${encodeURIComponent(r.id)}"><span class="role-name">${esc(roleLabel(r.id, r.label))}</span><span class="role-scope">${esc(scopeOf(r.id))}</span></a>`).join('');
-    const matrix = ROLE_MATRIX.map((r) => `<tr><td>${esc(roleLabel(r.id))}</td>${VIEWS.map((v) => (r.views.includes(v)
-      ? `<td class="yes">${u.icon('check')}<span class="sr-only">✓</span></td>`
-      : '<td class="no">—</td>')).join('')}<td class="rec">${T(`si.rec.${r.records}`)}</td></tr>`).join('');
-
-    el.innerHTML = `<div class="login-page">
+    el.innerHTML = `<div class="login-page login-page-narrow">
       ${topHtml()}
-      <div class="login-grid">
-        <section class="login-card" aria-labelledby="login-title">
-          <span class="login-kicker"><i class="sq"></i>${T('si.kicker')}</span>
-          <h1 class="login-title" id="login-title">${T('si.title')}</h1>
-          <p class="login-lede">${T('si.lede')}</p>
-          <div class="login-form">
-            ${pwRoles.length ? passwordFormHtml(pwRoles, scopeOf) : ''}
-            ${devRoles.length
-    ? `<div><div class="field-legend">${T('si.devRoles')}</div><div class="role-list">${roleLinks}</div><p class="login-hint">${T('si.devHint')}</p></div>`
-    : ''}
-            ${!pwRoles.length && !devRoles.length
-    ? `<div class="alert alert-warning" role="note">${u.icon('info')}<div><p>${T('si.noDev')}</p></div></div>`
-    : ''}
-            <button type="button" class="btn ${pwRoles.length ? 'btn-secondary' : 'btn-primary'} login-submit" disabled aria-disabled="true">${u.icon('login')}<span>${T('si.sso')}</span></button>
-            <p class="login-hint">${T('si.help')}</p>
-          </div>
-          <div class="alert alert-warning" role="note">${u.icon('alert')}<div><b class="alert-title">${T('si.alert.t')}</b><p>${T('si.alert.d')}</p></div></div>
-        </section>
-        <aside class="access-panel" aria-labelledby="access-title">
-          <div class="access-head"><div class="card-title" id="access-title">${T('si.matrix')}</div><p>${T('si.matrix.sub')}</p></div>
-          <div class="table-scroll"><table class="access-table">
-            <thead><tr><th scope="col">${T('si.th.role')}</th>${VIEWS.map((v) => `<th scope="col">${T(`nav.${v}`)}</th>`).join('')}<th scope="col">${T('si.th.records')}</th></tr></thead>
-            <tbody>${matrix}</tbody>
-          </table></div>
-          <div><div class="field-legend">${T('si.flow')}</div>
-            <ol class="access-flow">${[1, 2, 3].map((n) => `<li${n === 1 ? ' class="now"' : ''}><div class="flow-step">0${n}</div><div class="flow-name">${T(`si.f${n}.t`)}</div><div class="flow-desc">${T(`si.f${n}.d`)}</div></li>`).join('')}</ol>
-          </div>
-        </aside>
-      </div>
+      <section class="login-card login-card-solo" aria-labelledby="login-title">
+        <span class="login-kicker"><i class="sq"></i>${T('si.kicker')}</span>
+        <h1 class="login-title" id="login-title">${T('si.title')}</h1>
+        <p class="login-lede">${T('si.lede')}</p>
+        <div class="login-form">
+          <a class="btn btn-primary login-submit" href="auth/microsoft/start">${u.icon('login')}<span>${T('si.microsoft')}</span></a>
+          <p class="login-hint">${T('si.domain')}</p>
+        </div>
+      </section>
       <footer class="login-foot"><span>THINK4EVER DEVELOPER NETWORK · EARLY BUILDERS</span><span class="ok"><i></i>${T('si.foot')}</span></footer>
     </div>`;
     wireLang(el, onLang);
-    wirePasswordForm(el, onSignedIn);
+    if (EB.theme) EB.theme.sync();
   }
 
   function errorPage(el, code, titleKey, textKey, extra, onLang) {

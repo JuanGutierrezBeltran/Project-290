@@ -6,6 +6,15 @@
   <meta name="description" content="Think4Ever Early Builders / Developer Network dashboard">
   <meta name="color-scheme" content="dark">
   <title>Early Builders · Think4Ever</title>
+  <script>
+    try {
+      var savedTheme = localStorage.getItem('t4_theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.querySelector('meta[name="color-scheme"]').setAttribute('content', savedTheme);
+      }
+    } catch (e) {}
+  </script>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="css/views.css">
 </head>
@@ -77,6 +86,7 @@
           <div class="shell-crumb"><span>t4</span>/<span data-i18n="shell.crumb">early-builders</span>/<b id="page-crumb">Overview</b></div>
         </div>
         <div class="shell-head-right">
+          <button type="button" class="btn btn-secondary btn-sm theme-toggle" id="theme-toggle" data-theme-toggle aria-pressed="false"><span class="theme-toggle-label">Dark</span></button>
           <div class="shell-snapshot">
             <span class="snap-label" data-i18n="shell.snapshot">Last sync</span>
             <span class="snap-value mono is-empty" id="snap-value">—</span>
@@ -113,6 +123,7 @@
 
   <script src="dashboard-core.js" defer></script>
   <script src="js/i18n.js" defer></script>
+  <script src="js/theme.js" defer></script>
   <script src="js/ui.js" defer></script>
   <script src="js/views/overview.js" defer></script>
   <script src="js/views/builders.js" defer></script>

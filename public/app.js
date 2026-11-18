@@ -144,15 +144,15 @@
   function render() {
     document.documentElement.lang = i18n.getLang();
     i18n.translate(document);
+    if (EB.theme) EB.theme.sync();
     syncControls();
 
     const fullModes = { signin: EB.states.signIn, forbidden: EB.states.forbidden, notConfigured: EB.states.notConfigured };
     if (fullModes[state.mode]) {
       shell.hidden = true;
       fullPage.hidden = false;
-      // The 4th argument lets the sign-in screen reload the dashboard after a
-      // successful password login (POST auth/password-login sets the cookie).
       fullModes[state.mode](fullPage, state.info || {}, setLang, load);
+      if (EB.theme) EB.theme.sync();
       document.title = 'Early Builders · Think4Ever';
       return;
     }
