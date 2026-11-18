@@ -1,5 +1,6 @@
-// Overview: close target, referral funnel (emails sent through sign-up), PostHog
-// product path, HubSpot landing strip and Day-14 activation.
+// Overview: close target (Developer Network members / 200), verified accounts active
+// in the last 7 days, the four member cards, sign-ups by day and by channel,
+// the email funnel (unchanged), the product path and GA4 UTM results.
 (function (root) {
   'use strict';
   const EB = root.EB = root.EB || {};
@@ -19,7 +20,8 @@
         recentPercent: data.summary ? data.summary.recentPercent : null,
       };
     const measured = recent.recentPercent != null;
-    const activeValue = measured ? `${recent.recentPercent}%` : '—';
+    const activeCount = measured ? ui.num(recent.recentActive) : '—';
+    const activePct = measured ? `${recent.recentPercent}%` : '';
 
     return `<section class="ov-section">
       <div class="section-head"><h2 class="section-title">${T('ov.targets')}</h2><span class="ov-period">${T('ov.period')}: <b>${esc(ctx.periodLabel)}</b></span></div>
@@ -32,11 +34,74 @@
         </article>
         <article class="card target-card">
           <div class="tc-head"><h3 class="card-title">${T('tc.active')}</h3></div>
-          <div><div class="tc-value"><span class="stat-value hero${measured ? '' : ' is-null'}">${esc(activeValue)}</span></div><div class="stat-label">${measured ? esc(t('tc.active.of', { n: ui.num(recent.recentActive), accounts: ui.num(recent.recentAccounts) })) : T('tc.active.none')}</div></div>
+          <div><div class="tc-value"><span class="stat-value hero${measured ? '' : ' is-null'}">${esc(activeCount)}</span>${activePct ? `<span class="tc-of">${esc(activePct)}</span>` : ''}</div><div class="stat-label">${measured ? esc(t('tc.active.of', { n: ui.num(recent.recentActive), accounts: ui.num(recent.recentAccounts), p: recent.recentPercent })) : T('tc.active.none')}</div></div>
           <div class="meter" role="progressbar" aria-label="${T('tc.active.aria')}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${measured ? recent.recentPercent : 0}"><i style="width:${measured ? recent.recentPercent : 0}%"></i></div>
           <div class="tc-foot"><span>${T('tc.active.note')}</span></div>
         </article>
       </div>
+    </section>`;
+  }
+
+  function cardsHtml(ctx) {
+    const { data, T, ui, Core } = ctx;
+    const esc = ui.esc;
+    const members = data.members || Core.memberCards(Array.isArray(data.builders) ? data.builders : []);
+    const card = (label, value) => `<article class="card act-card"><span class="stat-label">${T(label)}</span><span class="stat-value">${esc(ui.num(value))}</span></article>`;
+    return `<section class="member-grid" aria-label="${T('mc.aria')}">
+      ${card('mc.signed', members.signedUp)}
+      ${card('mc.verified', members.verified)}
+      ${card('mc.notList', members.notOnBuilderList)}
+      ${card('mc.paid', members.paidMedia)}
+    </section>`;
+  }
+
+  function daysHtml(ctx) {
+    const { data, T, ui } = ctx;
+    const esc = ui.esc;
+    const days = Array.isArray(data.signupDays) ? data.signupDays : [];
+    const max = days.reduce((peak, day) => Math.max(peak, Number(day.count) || 0), 0);
+    const cols = days.map((day) => {
+      const count = Number(day.count) || 0;
+      const height = max > 0 ? Math.max(count ? 4 : 0, Math.round(count / max * 100)) : 0;
+      const label = String(day.date || '').slice(5);
+      return `<div class="day-col"><span class="day-count">${count ? esc(ui.num(count)) : ''}</span><span class="day-plot"><i style="height:${height}%"></i></span><span class="day-label" title="${esc(day.date)}">${esc(label)}</span></div>`;
+    }).join('');
+    return `<section class="card ov-chart" aria-labelledby="ov-days-h">
+      <div class="card-header"><div><h2 class="card-title" id="ov-days-h">${T('chart.days')}</h2><div class="card-sub">${T('chart.days.sub')}</div></div></div>
+      ${cols ? `<div class="day-chart" role="img" aria-label="${T('chart.days')}">${cols}</div>` : `<div class="empty-inline">${ui.dash()}</div>`}
+    </section>`;
+  }
+
+  function channelsHtml(ctx) {
+    const { data, T, ui } = ctx;
+    const esc = ui.esc;
+    const rows = Array.isArray(data.signupChannels) ? data.signupChannels : [];
+    const max = rows.reduce((peak, row) => Math.max(peak, Number(row.count) || 0), 0) || 1;
+    const bars = rows.map((row) => {
+      const width = Math.max(1.5, Math.round((Number(row.count) || 0) / max * 100));
+      return `<div class="ch-row"><span class="ch-label">${esc(row.label || row.key)}</span><span class="ch-bar"><i style="width:${width}%"></i></span><span class="ch-count">${esc(ui.num(row.count))}</span></div>`;
+    }).join('');
+    return `<section class="card ov-chart" aria-labelledby="ov-ch-h">
+      <div class="card-header"><div><h2 class="card-title" id="ov-ch-h">${T('chart.channels')}</h2><div class="card-sub">${T('chart.channels.sub')}</div></div></div>
+      <div class="ch-chart">${bars || `<div class="empty-inline">${ui.dash()}</div>`}</div>
+    </section>`;
+  }
+
+  function utmHtml(ctx) {
+    const { data, T, ui } = ctx;
+    const esc = ui.esc;
+    const utm = data.utm || { available: false, reason: 'not_synced', rows: [] };
+    const rows = utm.available && Array.isArray(utm.rows) ? utm.rows : [];
+    const body = rows.map((row) => `<tr>
+      <td>${esc(row.source)}</td><td>${esc(row.medium)}</td><td>${esc(row.campaign)}</td>
+      <td class="td-num mono">${esc(ui.num(row.sessions))}</td></tr>`).join('');
+    const empty = utm.reason === 'no_landing' ? T('utm.empty.landing') : T('utm.empty');
+    return `<section class="card" aria-labelledby="ov-utm-h">
+      <div class="card-header"><div><h2 class="card-title" id="ov-utm-h">${T('utm.title')}</h2><div class="card-sub">${T('utm.sub')}</div></div></div>
+      ${body ? `<div class="table-scroll"><table class="compact-table">
+        <thead><tr><th scope="col">${T('utm.source')}</th><th scope="col">${T('utm.medium')}</th><th scope="col">${T('utm.campaign')}</th><th scope="col" class="td-num">${T('utm.sessions')}</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>` : `<div class="empty-inline">${esc(empty)}</div>`}
     </section>`;
   }
 
@@ -76,47 +141,22 @@
     const raw = Array.isArray(data.referral) && data.referral.length ? data.referral : Core.referralSteps(data.invitations);
     const steps = Core.funnelSteps(raw);
     const pending = steps.some((s) => s.reason === 'pending');
-    const progress = Core.signupProgress(data.funnel, (data.program || {}).signupTarget);
+    const verified = (Array.isArray(data.funnel) ? data.funnel : []).find((step) => step.key === 'accountVerified');
+    const target = (data.program || {}).signupTarget;
     const go = ctx.canView('invitations')
       ? `<a href="#invitations" class="btn btn-ghost btn-sm"><span>${T('f.go')}</span>${ui.icon('arrowRight')}</a>` : '';
-    const foot = `<div class="ov-card-foot"><span>${esc(t('f.verifiedBeside', { n: ui.num(progress.total), target: ui.num(progress.target) }))}</span>${pending ? `<span>${T('f.referral.pending')}</span>` : ''}</div>`;
+    const foot = `<div class="ov-card-foot"><span>${esc(t('f.verifiedBeside', { n: ui.num(verified ? verified.value : 0), target: ui.num(target) }))}</span>${pending ? `<span>${T('f.referral.pending')}</span>` : ''}</div>`;
     return funnelBlock(ctx, { id: 'ov-referral-h', titleKey: 'f.referral', subKey: 'f.referral.sub', steps, keyStep: 'inviteSignedUp', go, foot });
   }
 
   function productHtml(ctx) {
-    const { data, T, ui, Core } = ctx;
-    const esc = ui.esc;
-    const steps = Core.funnelSteps(Core.productSteps(data.funnel, data.summary));
-    const acquire = Core.funnelSteps(Core.acquisitionSteps(data.funnel));
-    const sessions = acquire[0];
-    const forms = acquire[1];
-    const formRate = forms ? ui.funnelRate(forms, acquire.indexOf(forms)) : '—';
-    const foot = `<div class="ov-card-foot"><span>${T('f.acquire')}: <b>${esc(ui.num(sessions ? sessions.value : null))}</b></span><span>${T('funnel.formSignups')}: <b>${esc(ui.num(forms ? forms.value : null))}</b> · ${esc(formRate)}</span></div>`;
-    return funnelBlock(ctx, { id: 'ov-product-h', titleKey: 'f.product', subKey: 'f.product.sub', steps, keyStep: 'accountVerified', foot });
-  }
-
-  function activationHtml(ctx) {
-    const { data, T, ui, Core } = ctx;
-    const esc = ui.esc;
-    const s = data.summary || Core.summarizeBuilders([], data.snapshotAt);
-    const card = (labelKey, iconName, tone, value, meta) => `<div class="act-card">
-      <div class="act-top"><span class="stat-label">${T(labelKey)}</span><span class="act-ico ${tone}">${ui.icon(iconName)}</span></div>
-      <span class="stat-value">${esc(ui.num(value))}</span><span class="act-meta">${esc(meta)}</span></div>`;
-    return `<section class="card" aria-labelledby="ov-act-h">
-      <div class="card-header"><div><h2 class="card-title" id="ov-act-h">${T('a.title')}</h2><div class="card-sub">${T('a.sub')}</div></div></div>
-      <div class="act-grid">
-        ${card('a.active', 'check', 'ok', s.active, ctx.t('a.m.active', { n: s.granted }))}
-        ${card('a.within', 'clock', '', s.within14, ctx.t('a.m.within', { n: s.granted }))}
-        ${card('a.content', 'file', 'warn', s.missingContent, ctx.t('a.m.content'))}
-        ${card('a.project', 'cube', 'warn', s.missingProject, ctx.t('a.m.project'))}
-      </div>
-      ${data.tracking && data.tracking.creditsEvent === false ? `<div class="act-note">${ui.icon('info')}<span>${T('a.noCredits', { e: data.tracking.creditsEventName || 'credits_granted' })}</span></div>` : ''}
-      <ul class="act-defs"><li>${T('a.d1')}</li><li>${T('a.d2')}</li><li>${T('a.d3')}</li></ul>
-    </section>`;
+    const { data, Core } = ctx;
+    const steps = Core.funnelSteps(Core.productSteps(data.funnel));
+    return funnelBlock(ctx, { id: 'ov-product-h', titleKey: 'f.product', subKey: 'f.product.sub', steps, keyStep: 'accountVerified' });
   }
 
   function render(el, ctx) {
-    el.innerHTML = `<div class="ov-page">${targetsHtml(ctx)}<div class="ov-funnels">${referralHtml(ctx)}</div><div class="ov-mid">${productHtml(ctx)}${activationHtml(ctx)}</div></div>`;
+    el.innerHTML = `<div class="ov-page">${targetsHtml(ctx)}${cardsHtml(ctx)}${daysHtml(ctx)}<div class="ov-funnels">${referralHtml(ctx)}</div><div class="ov-mid">${productHtml(ctx)}${utmHtml(ctx)}</div>${channelsHtml(ctx)}</div>`;
   }
 
   EB.views.overview = Object.freeze({ titleKey: 'nav.overview', render });

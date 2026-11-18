@@ -11,26 +11,42 @@ const PROGRAM = {
   ceo_target: null, country: 'Colombia', mode: 'live', snapshot_at: '',
 };
 const TOTALS = {
-  sessions: '2454.0000', formSignups: 17, formHashed: 15, registrationStarted: '51.0000',
-  accountCreated: '12.0000', accountVerified: '7.0000', formToVerified: 3,
+  sessions: '2454.0000', formSignups: 17, formHashed: 15, formToVerified: 3,
+};
+const MEMBER = {
+  external_id: '501', email_domain: 'example.com', email_hash: 'a'.repeat(64), event_on: '2026-11-12', channel: 'paid_media',
+  attributes: JSON.stringify({
+    user_id: 'u-9', plan: 'think-free', plan_name: 'Think Free', subscription_status: 'none',
+    signup_at: '2026-11-13T06:00:00Z', verified_at: '2026-11-13T18:00:00Z',
+    dn_origin: 'paid_media', dn_channel: 'paid_media', dn_signup_at: '2026-11-13T04:30:00Z',
+    credits_used: '40', credits_remaining: '1460', last_credit_used_at: '2026-11-14T03:00:00Z',
+    dn_credits_loaded: 'false',
+  }),
 };
 
-test('the funnel has six steps with source and comparable base', () => {
-  const data = toDashboard({ program: PROGRAM, totals: TOTALS, lastSync: '2026-11-06T14:32:05Z', hashKey: true });
-  assert.deepStrictEqual(FUNNEL.map((s) => s.key), ['sessions', 'formSignups', 'registrationStarted', 'accountCreated', 'accountVerified', 'formToVerified']);
+test('the funnel counts Developer Network members and keeps the form cross', () => {
+  const data = toDashboard({
+    program: PROGRAM, totals: TOTALS, builders: [MEMBER],
+    projects: [{ email_hash: 'a'.repeat(64), attributes: JSON.stringify({ projects: 2 }) }],
+    lastSync: '2026-11-15T18:00:00-05:00', hashKey: true,
+  });
+  assert.deepStrictEqual(FUNNEL.map((s) => s.key), ['sessions', 'formSignups', 'dnSignedUp', 'accountCreated', 'accountVerified', 'creditsUsed', 'formToVerified']);
   assert.deepStrictEqual(data.funnel.map((s) => [s.key, s.source, s.base, s.value]), [
     ['sessions', 'hubspot', null, 2454],
     ['formSignups', 'hubspot', 'sessions', 17],
-    ['registrationStarted', 'posthog', null, 51],
-    ['accountCreated', 'posthog', 'registrationStarted', 12],
-    ['accountVerified', 'posthog', 'accountCreated', 7],
+    ['dnSignedUp', 'hubspot', null, 1],
+    ['accountCreated', 'hubspot', 'dnSignedUp', 1],
+    ['accountVerified', 'hubspot', 'accountCreated', 1],
+    ['creditsUsed', 'hubspot', 'accountVerified', 1],
     ['formToVerified', 'cross', 'formSignups', 3],
   ]);
-  assert.equal(data.funnel[5].baseValue, 15);
-  assert.equal(data.funnel[5].pending, false);
-  assert.equal(data.snapshotAt, '2026-11-06T14:32:05Z');
-  assert.equal(Core.signupProgress(data.funnel, data.program.signupTarget).total, 7, 'the target counts account_verified');
-  assert.deepStrictEqual(Core.funnelSteps(data.funnel).map((s) => s.conversion), [null, 1, null, 24, 58, 20]);
+  assert.equal(data.funnel[6].baseValue, 15);
+  assert.equal(data.funnel[6].pending, false);
+  assert.equal(Core.signupProgress(data.funnel, data.program.signupTarget).total, 1, 'the target counts members');
+  assert.deepEqual(data.members, { signedUp: 1, verified: 1, notOnBuilderList: 1, paidMedia: 1 });
+  assert.equal(data.builders[0].projects, 2);
+  assert.equal(data.builders[0].credits, 1500);
+  assert.equal(data.utm.available, false);
 });
 
 test('without EMAIL_HASH_KEY the cross is pending and shows no value', () => {
@@ -39,12 +55,12 @@ test('without EMAIL_HASH_KEY the cross is pending and shows no value', () => {
   assert.equal(cross.pending, true);
   assert.equal(cross.value, 0);
   assert.equal(data.tracking.emailHash, false);
-  assert.equal(Core.funnelSteps(data.funnel)[5].reason, 'pending');
+  assert.equal(Core.funnelSteps(data.funnel)[6].reason, 'pending');
 });
 
 test('without synced data every step is 0 and invitations stay pending (nothing is estimated)', () => {
   const data = toDashboard({ program: PROGRAM });
-  assert.deepStrictEqual(data.funnel.map((s) => s.value), [0, 0, 0, 0, 0, 0]);
+  assert.deepStrictEqual(data.funnel.map((s) => s.value), [0, 0, 0, 0, 0, 0, 0]);
   assert.equal(data.snapshotAt, '');
   assert.deepStrictEqual(data.builders, []);
   assert.deepStrictEqual(data.channels, []);
@@ -77,34 +93,26 @@ test('channels are mapped to whole numbers', () => {
   ]);
 });
 
-const BUILDER_ROW = {
-  external_id: 'abcdef12'.padEnd(64, '0'), email_domain: 'example.com', verified_on: '2026-11-04',
-  attributes: JSON.stringify({ code: 'EB-ABCDEF12', projects: 1, sign_ins: 3, last_sign_in: '2026-11-05', verified_at: '2026-11-04', credits_granted_at: '', active_days: ['2026-11-05', 'bad', '2026-11-01'] }),
-};
-
-test('builders come from PostHog verified people; active needs a project AND recorded content', () => {
-  const withContent = toDashboard({
-    program: PROGRAM, builders: [BUILDER_ROW],
-    content: [{ builder_code: 'EB-ABCDEF12', url: 'https://example.test/p', platform: 'YouTube', published_at: '2026-11-05' }],
+test('builders are HubSpot members; projects come only from a matching PostHog hash', () => {
+  const matched = toDashboard({
+    program: PROGRAM, builders: [MEMBER],
+    projects: [{ email_hash: 'a'.repeat(64), attributes: JSON.stringify({ projects: 2 }) }],
   }).builders[0];
-  assert.equal(withContent.id, 'EB-ABCDEF12');
-  assert.equal(withContent.email, '@example.com', 'only the domain');
-  assert.equal(withContent.signedUpAt, '2026-11-04');
-  assert.equal(withContent.contentUrl, 'https://example.test/p');
-  assert.equal(withContent.contentPlatform, 'YouTube');
-  assert.equal(withContent.stage, 'Activo');
-  assert.equal(Core.isActive(withContent), true);
+  assert.equal(matched.id, 'u-9');
+  assert.equal(matched.email, '@example.com', 'only the domain');
+  assert.equal(matched.signedUpAt, '2026-11-13');
+  assert.equal(matched.plan, 'free');
+  assert.equal(matched.channel, 'Paid media (Gmail Ads)');
+  assert.equal(matched.projects, 2);
+  assert.equal('contentUrl' in matched, false);
 
-  const projectOnly = toDashboard({ program: PROGRAM, builders: [BUILDER_ROW] }).builders[0];
-  assert.equal(projectOnly.stage, 'En progreso');
-  assert.equal(Core.isActive(projectOnly), false, 'project_created alone is not enough');
-  assert.equal(projectOnly.creditsGrantedAt, '');
-  assert.deepEqual(projectOnly.activeDays, ['2026-11-01', '2026-11-05']);
+  const unmatched = toDashboard({ program: PROGRAM, builders: [MEMBER] }).builders[0];
+  assert.equal(unmatched.projects, null, 'no PostHog person: the project count is not guessed');
+  assert.deepEqual(unmatched.activeDays, ['2026-11-13']);
 });
 
 test('Date objects are refused instead of being shifted across timezones', () => {
-  const content = [{ builder_code: 'EB-ABCDEF12', url: 'https://x.test', published_at: new Date('2026-10-28T00:00:00Z') }];
-  assert.throws(() => toDashboard({ program: PROGRAM, builders: [BUILDER_ROW], content }), /dateStrings/);
+  assert.throws(() => toDashboard({ program: PROGRAM, builders: [{ ...MEMBER, event_on: new Date('2026-10-28T00:00:00Z') }] }), /dateStrings/);
 });
 
 function fakePool(answers) {
@@ -127,19 +135,16 @@ test('loadDashboard queries per program and builds the payload from synced data'
     lastSync: [{ last_ok: '2026-11-06T14:32:05Z' }],
     sessions: [{ total: '2454.0000' }],
     formSignups: [{ total: 17, hashed: '15' }],
-    signups: [{ total: '51.0000' }],
-    accountsCreated: [{ total: '12.0000' }],
-    accountsVerified: [{ total: '7.0000' }],
     crossVerified: [{ total: 3 }],
     channels: [{ channel: 'Direct', sessions: '201.0000', contacts: '8.0000' }],
   });
   const data = await loadDashboard(pool, { EMAIL_HASH_KEY: 'k' });
-  assert.deepStrictEqual(data.funnel.map((s) => s.value), [2454, 17, 51, 12, 7, 3]);
-  assert.equal(data.funnel[5].baseValue, 15);
+  assert.deepStrictEqual(data.funnel.map((s) => s.value), [2454, 17, 0, 0, 0, 0, 3]);
+  assert.equal(data.funnel[6].baseValue, 15);
   assert.equal(data.snapshotAt, '2026-11-06T14:32:05Z');
   assert.equal(data.sources[0].state, 'Conectado');
   assert.deepStrictEqual(data.channels, [{ channel: 'Direct', sessions: 201, contacts: 8 }]);
-  assert.equal(pool.calls.length, 14);
+  assert.equal(pool.calls.length, 11);
   for (const call of pool.calls.slice(1)) assert.deepStrictEqual(call.params, [1]);
   assert.equal(pool.calls.some((c) => /funnel_stages/.test(c.sql)), false, 'never reads the old hand-entered funnel');
 });
@@ -150,11 +155,12 @@ test('loadDashboard fails when there is no program row', async () => {
 
 test('every count excludes internal accounts', () => {
   assert.match(SQL.formSignups, /is_internal = 0/);
-  for (const key of ['signups', 'accountsCreated', 'accountsVerified']) assert.match(SQL[key], /dim_value <> 'Internal'/);
-  assert.match(SQL.accountsVerified, /ph_accounts_verified/);
+  assert.match(SQL.builders, /kind = 'member'/);
+  assert.match(SQL.builders, /is_internal = 0/);
+  assert.match(SQL.projects, /kind = 'builder'/);
+  assert.match(SQL.projects, /is_internal = 0/);
   assert.match(SQL.crossVerified, /b\.is_internal = 0/);
   assert.match(SQL.crossVerified, /email_hash/);
-  assert.match(SQL.builders, /is_internal = 0/);
 });
 
 const NOW = new Date('2026-11-05T12:00:00Z');

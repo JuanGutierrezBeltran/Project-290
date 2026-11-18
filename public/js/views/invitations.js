@@ -48,7 +48,7 @@
     const sent = byKey('emailsSent');
     const signed = byKey('inviteSignedUp');
     const verified = (Array.isArray(data.funnel) ? data.funnel : []).find((s) => s.key === 'accountVerified');
-    const withProject = product.find((s) => s.key === 'withProject');
+    const creditsUsed = product.find((s) => s.key === 'creditsUsed');
     const pending = steps.some((s) => s.reason === 'pending');
     const drop = insights.largestDrop;
     const labelOf = (list, key) => {
@@ -102,7 +102,7 @@
         <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.sent')}</span>${ui.icon('list')}</div><div class="stat-value">${esc(ui.num(sentCount))}</div><div class="inv-sum-foot">${T('inv.sum.sent.f')}</div></div>
         <div class="inv-sum is-hero"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.enrolled')}</span>${ui.icon('userCheck')}</div><div class="stat-value hero">${esc(ui.num(signedCount))}</div><div class="inv-sum-foot">${T('inv.sum.enrolled.f')}</div></div>
         <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.verified')}</span>${ui.icon('percent')}</div><div class="stat-value">${esc(ui.num(verified ? verified.value : null))}</div><div class="inv-sum-foot">${T('inv.sum.verified.f')}</div></div>
-        <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.project')}</span>${ui.icon('cube')}</div><div class="stat-value">${esc(ui.num(withProject ? withProject.value : null))}</div><div class="inv-sum-foot">${T('inv.sum.project.f')}</div></div>
+        <div class="inv-sum"><div class="inv-sum-head"><span class="stat-label">${T('inv.sum.credits')}</span>${ui.icon('cube')}</div><div class="stat-value">${esc(ui.num(creditsUsed ? creditsUsed.value : null))}</div><div class="inv-sum-foot">${T('inv.sum.credits.f')}</div></div>
       </section>
       <section aria-labelledby="inv-stages-title">
         <div class="section-head tight"><h2 class="section-title" id="inv-stages-title">${T('inv.stages')}</h2></div>
@@ -123,7 +123,6 @@
           </table></div>
         </div>
       </section>
-      ${Array.isArray(data.channels) ? ui.channelTable(data.channels) : ''}
       <section class="inv-notes">
         <div class="card">
           <div class="card-header no-mb"><div><div class="card-title">${T('inv.order')}</div><div class="card-sub">${T('inv.order.sub')}</div></div></div>

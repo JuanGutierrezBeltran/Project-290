@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Users · Early Builders · Think4Ever</title>
+  <script>
+    try {
+      var savedTheme = localStorage.getItem('t4_theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.querySelector('meta[name="color-scheme"]').setAttribute('content', savedTheme);
+      }
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="css/views.css">
+  <style>
+    .role-select{width:auto;height:32px;min-width:8.5rem;padding-right:34px}
+    .log-pager{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+    .log-range{font:600 12px var(--font-mono);color:var(--color-text-secondary)}
+    .mock-fit .table-scroll table{min-width:0}
+    .mock-fit th,.mock-fit td{white-space:nowrap}
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="logo-row">
+        <div class="logo-mark" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M12 6v14M7 14l5 6 5-6"/></svg></div>
+        <div class="logo-name">Think4Ever <span>Builders</span></div>
+      </div>
+      <nav aria-label="Dashboard sections">
+        <div class="nav-section-label">Program</div>
+        <a class="nav-item" href="index.html#overview"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg><span>Overview</span></a>
+        <a class="nav-item" href="index.html#builders"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Builders</span></a>
+        <a class="nav-item" href="index.html#invitations"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg><span>Enrollment</span></a>
+        <a class="nav-item" href="index.html#sources"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg><span>Data sources</span></a>
+        <a class="nav-item active" href="mock-access.html" aria-current="page"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/><path d="M19 8v6"/></svg><span>Users</span></a>
+      </nav>
+      <div class="sidebar-spacer"></div>
+      <div class="user-card">
+        <div class="user-avatar">AR</div>
+        <div class="user-meta">
+          <div class="user-name">Ana Ruiz</div>
+          <div class="user-role"><span class="pill pill-lime">Admin</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="page-main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="page-kicker">Think4Ever Developer Network</div>
+          <h1 class="page-title">Users</h1>
+          <div class="shell-crumb"><span>t4</span>/<span>early-builders</span>/<b>Users</b></div>
+        </div>
+        <div class="shell-head-right">
+          <button type="button" class="btn btn-secondary btn-sm" id="theme-toggle" aria-pressed="false"><span id="theme-label">Dark</span></button>
+          <div class="shell-profile">
+            <span class="ini" aria-hidden="true">AR</span>
+            <span class="who">Ana Ruiz</span>
+            <span class="pill pill-lime">Admin</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="page-inner">
+        <section class="card table-card mock-fit" aria-labelledby="users-title">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title" id="users-title">People who have signed in</h2>
+              <div class="card-sub">Sample rows for this preview. A real sign-in from @think4ever.com would appear here.</div>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">First sign-in</th>
+                  <th scope="col">Last sign-in</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="td-id">Ana Ruiz</td>
+                  <td class="mono">ana.ruiz@think4ever.com</td>
+                  <td>
+                    <label class="sr-only" for="role-ana">Role for Ana Ruiz</label>
+                    <select class="role-select" id="role-ana">
+                      <option selected>Admin</option>
+                      <option>Viewer</option>
+                    </select>
+                  </td>
+                  <td class="mono">18 Nov 2026, 09:12</td>
+                  <td class="mono">18 Nov 2026, 16:04</td>
+                </tr>
+                <tr>
+                  <td class="td-id">Luis Mora</td>
+                  <td class="mono">luis.mora@think4ever.com</td>
+                  <td>
+                    <label class="sr-only" for="role-luis">Role for Luis Mora</label>
+                    <select class="role-select" id="role-luis">
+                      <option>Admin</option>
+                      <option selected>Viewer</option>
+                    </select>
+                  </td>
+                  <td class="mono">18 Nov 2026, 10:41</td>
+                  <td class="mono">18 Nov 2026, 15:22</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card table-card mock-fit mt-16" aria-labelledby="log-title">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title" id="log-title">Activity</h2>
+              <div class="card-sub">Who opened a page and what they changed.</div>
+            </div>
+            <div class="log-pager">
+              <span class="log-range">1–6 of 6</span>
+              <button type="button" class="btn btn-secondary btn-sm" disabled>Newer</button>
+              <button type="button" class="btn btn-secondary btn-sm" disabled>Older</button>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">When</th>
+                  <th scope="col">Who</th>
+                  <th scope="col">Page</th>
+                  <th scope="col">What they did</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">18 Nov 2026, 16:04</td>
+                  <td>Ana Ruiz</td>
+                  <td>Users</td>
+                  <td>Changed Luis Mora from Admin to Viewer</td>
+                </tr>
+                <tr>
+                  <td class="mono">18 Nov 2026, 15:22</td>
+                  <td>Luis Mora</td>
+                  <td>Enrollment</td>
+                  <td>Opened the page</td>
+                </tr>
+                <tr>
+                  <td class="mono">18 Nov 2026, 15:10</td>
+                  <td>Luis Mora</td>
+                  <td>Builders</td>
+                  <td>Saved published content for EB-A1C4</td>
+                </tr>
+                <tr>
+                  <td class="mono">18 Nov 2026, 14:58</td>
+                  <td>Ana Ruiz</td>
+                  <td>Overview</td>
+                  <td>Opened the page</td>
+                </tr>
+                <tr>
+                  <td class="mono">18 Nov 2026, 11:18</td>
+                  <td>Ana Ruiz</td>
+                  <td>Data sources</td>
+                  <td>Opened the page</td>
+                </tr>
+                <tr>
+                  <td class="mono">18 Nov 2026, 09:12</td>
+                  <td>Ana Ruiz</td>
+                  <td>—</td>
+                  <td>Signed in</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script>
+    (function () {
+      var btn = document.getElementById('theme-toggle');
+      var label = document.getElementById('theme-label');
+      function current() {
+        return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      }
+      function paint() {
+        var theme = current();
+        label.textContent = theme === 'light' ? 'Light' : 'Dark';
+        btn.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+        btn.setAttribute('aria-label', 'Color theme: ' + label.textContent);
+      }
+      btn.addEventListener('click', function () {
+        var next = current() === 'light' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', next);
+        var meta = document.querySelector('meta[name="color-scheme"]');
+        if (meta) meta.setAttribute('content', next);
+        try { localStorage.setItem('t4_theme', next); } catch (e) {}
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

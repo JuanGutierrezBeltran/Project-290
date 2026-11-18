@@ -23,7 +23,11 @@ for (const role of ['admin', 'program_manager']) {
   test(`${role} receives full builder records`, () => {
     const out = access.projectDashboard(clone(), role);
     assert.equal(out.builders.length, 8);
-    assert.deepEqual(out.builders[0], fixture.builders[0]);
+    assert.equal(out.builders[0].id, 'EB-001');
+    assert.equal(out.builders[0].email, fixture.builders[0].email);
+    assert.equal('contentUrl' in out.builders[0], false);
+    assert.equal('contentAt' in out.builders[0], false);
+    assert.equal('contentPlatform' in out.builders[0], false);
     assert.equal(out.access.recordAccess, 'full');
     assert.equal(out.restricted, undefined);
   });

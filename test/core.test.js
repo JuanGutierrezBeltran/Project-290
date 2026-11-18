@@ -51,9 +51,9 @@ test('summarizeBuilders reproduces the overview cards for the fixture', () => {
     missingContent: 2,
     missingProject: 1,
     withProject: 4,
-    recentActive: 6,
-    recentAccounts: 6,
-    recentPercent: 100,
+    recentActive: 0,
+    recentAccounts: 0,
+    recentPercent: null,
   });
 });
 
@@ -81,16 +81,16 @@ test('workedDays marks recorded days and never spreads a sign-in count', () => {
   assert.equal(none.some((d) => d.on), false);
 });
 
-test('recentActivity is the share of verified accounts that used the product in the last 7 days', () => {
-  const recent = Core.recentActivity(fixture.builders, SNAPSHOT, 7);
-  assert.equal(recent.recentAccounts, 6);
-  assert.equal(recent.recentActive, 6);
-  assert.equal(recent.recentPercent, 100);
-  const quiet = Core.recentActivity([
-    { signedUpAt: '2026-10-01', activeDays: ['2026-10-02'], lastSignIn: '2026-11-05', signIns: 9 },
-    { signedUpAt: '', activeDays: ['2026-11-05'] },
+test('recentActivity is the share of verified accounts that used credits in the last 7 days', () => {
+  const recent = Core.recentActivity([
+    { verifiedAt: '2026-11-01', activeDays: ['2026-11-05'], lastCreditUsedAt: '2026-11-05' },
+    { verifiedAt: '2026-10-01', activeDays: ['2026-10-02'], lastCreditUsedAt: '2026-10-02' },
+    { verifiedAt: '', activeDays: ['2026-11-05'] },
   ], SNAPSHOT, 7);
-  assert.deepEqual(quiet, { recentActive: 0, recentAccounts: 1, recentPercent: 0 });
+  assert.equal(recent.recentAccounts, 2);
+  assert.equal(recent.recentActive, 1);
+  assert.equal(recent.recentPercent, 50);
+  assert.equal(Core.recentActivity(fixture.builders, SNAPSHOT, 7).recentAccounts, 0, 'a sign-up date is not a verified timestamp');
   assert.equal(Core.recentActivity([], 'not-a-date').recentPercent, null);
 });
 
@@ -111,6 +111,15 @@ test('filterBuilders searches id, refKey and email, case-insensitive and trimmed
   assert.deepEqual(ids(Core.filterBuilders(fixture.builders, { search: 'B***05' })), ['EB-005']);
   assert.equal(Core.filterBuilders(fixture.builders, { search: 'EB-00' }).length, 8);
   assert.equal(Core.filterBuilders(fixture.builders, { search: 'nope' }).length, 0);
+});
+
+test('filterBuilders filters by plan as well as stage', () => {
+  const rows = [
+    { id: 'u-1', plan: 'free', channel: 'Paid media (Gmail Ads)', channelKey: 'paid_media' },
+    { id: 'u-2', plan: 'premium', channel: 'WhatsApp', channelKey: 'whatsapp' },
+  ];
+  assert.deepEqual(ids(Core.filterBuilders(rows, { plan: 'premium' })), ['u-2']);
+  assert.deepEqual(ids(Core.filterBuilders(rows, { search: 'gmail' })), ['u-1']);
 });
 
 test('filterBuilders filters by stage and combines with search', () => {
@@ -140,14 +149,19 @@ test('referralSteps converts only along the invitee list and stays pending witho
   assert.equal(pending[3].conversion, null);
 });
 
-test('productSteps stays inside PostHog and counts verified people with a project', () => {
-  const summary = Core.summarizeBuilders(fixture.builders, SNAPSHOT);
-  const steps = Core.funnelSteps(Core.productSteps(fixture.funnel, summary));
+test('productSteps stays inside Developer Network members', () => {
+  const funnel = [
+    { key: 'dnSignedUp', source: 'hubspot', base: null, value: 36 },
+    { key: 'accountCreated', source: 'hubspot', base: 'dnSignedUp', value: 26 },
+    { key: 'accountVerified', source: 'hubspot', base: 'accountCreated', value: 19 },
+    { key: 'creditsUsed', source: 'hubspot', base: 'accountVerified', value: 8 },
+  ];
+  const steps = Core.funnelSteps(Core.productSteps(funnel));
   assert.deepEqual(steps.map((s) => [s.key, s.value, s.conversion]), [
-    ['registrationStarted', 30, null],
-    ['accountCreated', 12, 40],
-    ['accountVerified', 6, 50],
-    ['withProject', 4, 67],
+    ['dnSignedUp', 36, null],
+    ['accountCreated', 26, 72],
+    ['accountVerified', 19, 73],
+    ['creditsUsed', 8, 42],
   ]);
   const acquire = Core.funnelSteps(Core.acquisitionSteps(fixture.funnel));
   assert.deepEqual(acquire.map((s) => [s.key, s.conversion]), [['sessions', null], ['formSignups', 25]]);
@@ -195,12 +209,72 @@ test('funnelSteps is safe with zero values and empty input', () => {
   assert.deepEqual(Core.funnelSteps(undefined), []);
 });
 
-test('signupProgress compares verified accounts to the target', () => {
-  assert.deepEqual(Core.signupProgress(fixture.funnel, fixture.program.signupTarget), { total: 6, target: 200, percent: 3 });
-  assert.equal(Core.signupProgress([{ key: 'accountVerified', value: 500 }], 200).percent, 100);
-  assert.equal(Core.signupProgress([{ key: 'registrationStarted', value: 51 }], 200).total, 0, 'registrations do not count');
+test('signupProgress compares Developer Network members to the target', () => {
+  assert.deepEqual(Core.signupProgress([{ key: 'dnSignedUp', value: 36 }, { key: 'accountVerified', value: 19 }], 200), { total: 36, target: 200, percent: 18 });
+  assert.equal(Core.signupProgress([{ key: 'dnSignedUp', value: 500 }], 200).percent, 100);
+  assert.equal(Core.signupProgress([{ key: 'accountVerified', value: 19 }], 200).total, 0, 'verified accounts are not the close target');
   assert.equal(Core.signupProgress([], 200).total, 0);
-  assert.equal(Core.signupProgress([{ key: 'accountVerified', value: 5 }], 0).percent, 0);
+  assert.equal(Core.signupProgress([{ key: 'dnSignedUp', value: 5 }], 0).percent, 0);
+});
+
+test('member dates use Colombia time and credits granted is used plus remaining', () => {
+  assert.equal(Core.bogotaDay('2026-11-13T04:30:00Z'), '2026-11-12');
+  assert.equal(Core.bogotaDay('2026-11-13T05:00:00Z'), '2026-11-13');
+  assert.equal(Core.bogotaDay(''), '');
+  assert.equal(Core.creditsGranted(1600, -100), 1500);
+  assert.equal(Core.creditsGranted(null, null), null);
+  assert.equal(Core.planTier('think-free', 'Think Free', 'none'), 'free');
+  assert.equal(Core.planTier('think-plus', 'Think Plus', 'active'), 'premium');
+  assert.equal(Core.planTier('', '', 'active'), '');
+  const member = Core.shapeMember({
+    id: '501', domain: 'example.com',
+    attributes: {
+      user_id: 'u-9', plan: 'think-free', plan_name: 'Think Free', subscription_status: 'none',
+      signup_at: '2026-11-13T06:00:00Z', verified_at: '2026-11-13T18:00:00Z',
+      dn_origin: 'paid_media', dn_channel: 'paid_media', dn_signup_at: '2026-11-13T04:30:00Z',
+      credits_used: '40', credits_remaining: '1460', last_credit_used_at: '2026-11-14T03:00:00Z',
+      dn_credits_loaded: 'false',
+    },
+    projects: null,
+  });
+  assert.equal(member.id, 'u-9');
+  assert.equal(member.plan, 'free');
+  assert.equal(member.signedUpAt, '2026-11-13');
+  assert.equal(member.verifiedAt, '2026-11-13');
+  assert.equal(member.dnSignupAt, '2026-11-12');
+  assert.equal(member.lastCreditUsedAt, '2026-11-13');
+  assert.equal(member.credits, 1500);
+  assert.equal(member.creditsPending, true);
+  assert.equal(member.projects, null);
+  assert.equal(member.channel, 'Paid media (Gmail Ads)');
+  assert.equal(member.origin, 'paid_media');
+  const days = Core.signupDays([
+    { dnSignupAt: '2026-11-12' }, { dnSignupAt: '2026-11-12' }, { dnSignupAt: '2026-11-14' },
+  ], '2026-11-15T18:00:00-05:00');
+  assert.deepEqual(days, [
+    { date: '2026-11-12', count: 2 }, { date: '2026-11-13', count: 0 }, { date: '2026-11-14', count: 1 }, { date: '2026-11-15', count: 0 },
+  ]);
+  assert.deepEqual(Core.signupChannels([
+    { channelKey: 'paid_media' }, { channelKey: 'paid_media' }, { channelKey: 'direct' }, { channelKey: '' },
+  ]), [
+    { key: 'paid_media', label: 'Paid media (Gmail Ads)', count: 2 },
+    { key: 'direct', label: 'Direct / no UTM', count: 1 },
+  ]);
+  const cards = Core.memberCards([
+    { origin: 'builder_list', channelKey: 'direct', verifiedAt: '2026-11-01' },
+    { origin: 'paid_media', channelKey: 'paid_media', verifiedAt: '' },
+    { origin: 'own', channelKey: 'social', verifiedAt: '2026-11-02' },
+  ]);
+  assert.deepEqual(cards, { signedUp: 3, verified: 2, notOnBuilderList: 2, paidMedia: 1 });
+  const utm = Core.utmResults([
+    { landing_page: '/es/developer-network-co', source: 'google', medium: 'cpc', campaign: 'dn', sessions: 4 },
+    { landing_page: '/es/developer-network-co', source: 'google', medium: 'cpc', campaign: 'dn', sessions: 1 },
+    { landing_page: '/pricing', source: 'direct', medium: '(none)', campaign: '(not set)', sessions: 9 },
+  ]);
+  assert.equal(utm.available, true);
+  assert.deepEqual(utm.rows, [{ source: 'google', medium: 'cpc', campaign: 'dn', sessions: 5 }]);
+  assert.equal(Core.utmResults([{ landing_page: '/pricing', source: 'direct', medium: 'x', campaign: 'y', sessions: 1 }]).reason, 'no_landing');
+  assert.equal(Core.utmResults([]).reason, 'not_synced');
 });
 
 test('channelBreakdown aggregates by channel', () => {

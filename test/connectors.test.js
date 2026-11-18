@@ -104,6 +104,41 @@ test('with EMAIL_HASH_KEY, hubspot form sign-ups carry only the HMAC hash, never
   }
 });
 
+test('hubspot members use t4e_dn_origin and drop the internal list', async () => {
+  const realFetch = global.fetch;
+  global.fetch = async (url, opts = {}) => {
+    const target = String(url);
+    let body = {};
+    if (target.includes('/analytics/v2/reports/sources/daily')) body = {};
+    else if (target.includes('/crm/v3/lists/search')) body = { lists: [{ listId: '77', name: 'T4E · Contactos internos y de prueba' }] };
+    else if (target.includes('/lists/77/memberships')) body = { results: [{ recordId: '900' }] };
+    else {
+      const asked = JSON.parse(opts.body || '{}');
+      const members = asked.properties && asked.properties.includes('t4e_dn_origin');
+      body = members ? { results: [
+        { id: '900', properties: { email: 'in@think4ever.com', t4e_dn_origin: 'own', t4e_user_id: 'drop-me' } },
+        { id: '901', properties: { email: 'ana@example.com', t4e_dn_origin: 'paid_media', t4e_dn_channel: 'paid_media', t4e_user_id: 'u-1', t4e_plan: 'think-free', t4e_signup_at: '2026-11-13T06:00:00Z', t4e_dn_signup_date: '2026-11-13T04:30:00Z', t4e_credits_used: '3', t4e_credits_remaining: '10' } },
+        { id: '902', properties: { email: 'nope@example.com', t4e_dn_origin: 'other' } },
+      ] } : { results: [] };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
+  try {
+    const load = await withEnv({ HUBSPOT_TOKEN: 'test-token' }, () => connectors.hubspot());
+    const members = load.events.filter((e) => e.kind === 'member');
+    assert.deepStrictEqual(members.map((e) => e.id), ['901']);
+    assert.equal(members[0].user_id, 'u-1');
+    assert.equal(members[0].dn_origin, 'paid_media');
+    assert.equal(members[0].dn_channel, 'paid_media');
+    assert.equal(members[0].date, '2026-11-12');
+    assert.deepStrictEqual(load.replaceEventKinds, ['member']);
+    assert.equal(load.snapshots.find((s) => s.key === 'member_coverage').rows[0].members, 1);
+    assert.doesNotMatch(JSON.stringify(load), /ana@|in@|nope@/);
+  } finally {
+    global.fetch = realFetch;
+  }
+});
+
 test('ga4 refuses a malformed service account without echoing it', async () => {
   await withEnv({ GA4_PROPERTY_ID: '123', GA4_SERVICE_ACCOUNT: '{"private_key":"SECRET-KEY-MATERIAL' }, async () => {
     await assert.rejects(() => connectors.ga4(), (err) => {

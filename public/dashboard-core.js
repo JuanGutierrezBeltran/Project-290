@@ -10,8 +10,83 @@
   'use strict';
 
   const DAY_MS = 86400000;
+  const BOGOTA_MS = 5 * 3600000;
   const ACTIVATION_DAYS = 14;
   const FOLLOW_UP_LIMIT = 5;
+  const CHANNELS = Object.freeze([
+    ['paid_media', 'Paid media (Gmail Ads)'],
+    ['whatsapp', 'WhatsApp'],
+    ['team_referral', 'Team referral link'],
+    ['social', 'Social'],
+    ['email', 'Email'],
+    ['direct', 'Direct / no UTM'],
+  ]);
+
+  // Portal timestamps arrive as UTC text, ISO datetimes or epoch milliseconds.
+  function parseUtc(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value >= 1e12 ? value : value * 1000;
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return null;
+    if (/^\d{10}$/.test(raw)) return Number(raw) * 1000;
+    if (/^\d{12,16}$/.test(raw)) return Number(raw);
+    let iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) iso += 'T00:00:00Z';
+    else if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(iso)) iso += 'Z';
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? null : ms;
+  }
+
+  // Calendar day in Colombia (UTC−5, no daylight saving).
+  function bogotaDay(value) {
+    const ms = parseUtc(value);
+    if (ms == null) return '';
+    return new Date(ms - BOGOTA_MS).toISOString().slice(0, 10);
+  }
+
+  function finiteOrNull(value) {
+    if (value === '' || value === null || value === undefined) return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function creditsGranted(used, remaining) {
+    const u = finiteOrNull(used);
+    const r = finiteOrNull(remaining);
+    if (u == null && r == null) return null;
+    return (u == null ? 0 : u) + (r == null ? 0 : r);
+  }
+
+  function creditsLoaded(value) {
+    return value === true || value === 1 || String(value).trim().toLowerCase() === 'true';
+  }
+
+  function planTier(plan, planName, subscriptionStatus) {
+    const code = String(plan || '').trim();
+    const name = String(planName || '').trim();
+    if (!code && !name) return '';
+    const free = code.toLowerCase() === 'think-free' || name.toLowerCase() === 'think free';
+    if (free) return 'free';
+    if (String(subscriptionStatus || '').trim().toLowerCase() === 'active') return 'premium';
+    return '';
+  }
+
+  function channelLabel(key) {
+    const found = CHANNELS.find((row) => row[0] === key);
+    return found ? found[1] : (key ? String(key) : '');
+  }
+
+  function eachDay(start, end) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || start > end) return [];
+    const [year, month, day] = start.split('-').map(Number);
+    let cursor = Date.UTC(year, month - 1, day);
+    const last = Date.parse(`${end}T00:00:00Z`);
+    const out = [];
+    while (cursor <= last && out.length < 400) {
+      out.push(new Date(cursor).toISOString().slice(0, 10));
+      cursor += DAY_MS;
+    }
+    return out;
+  }
 
   // Days elapsed from a YYYY-MM-DD date (noon Bogotá) until the snapshot.
   function dayNumber(date, snapshotAt) {
@@ -81,16 +156,10 @@
     return keys.filter((key) => byKey.get(key)).map((key) => byKey.get(key));
   }
 
-  // PostHog only, in order. "Has a project" is verified people with at least one project.
-  function productSteps(funnel, summary) {
-    const steps = stepsByKey(funnel, ['registrationStarted', 'accountCreated', 'accountVerified']);
-    steps.push({
-      key: 'withProject',
-      source: 'posthog',
-      base: 'accountVerified',
-      value: Number(summary && summary.withProject) || 0,
-    });
-    return steps;
+  // Developer Network members only, in order. Landing views are a different source
+  // and are not a step here, so the rates stay inside one population.
+  function productSteps(funnel) {
+    return stepsByKey(funnel, ['dnSignedUp', 'accountCreated', 'accountVerified', 'creditsUsed']);
   }
 
   // HubSpot only. Never compared with PostHog sign-ups.
@@ -125,19 +194,21 @@
         const day = String(value || '').slice(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(day)) known.add(day);
       }
+    } else if (builder && /^\d{4}-\d{2}-\d{2}$/.test(String(builder.lastCreditUsedAt || ''))) {
+      known.add(builder.lastCreditUsedAt);
     } else if (builder && /^\d{4}-\d{2}-\d{2}$/.test(String(builder.lastSignIn || ''))) {
       known.add(builder.lastSignIn);
     }
     return days.map((date) => ({ date, on: known.has(date) }));
   }
 
-  // Accounts are people with a verified sign-up. Active means they signed in or
-  // created a project on one of the last `days` calendar days. The count is never
-  // guessed from a sign-in total.
+  // Confirmed accounts are members with t4e_verified_at. Active means that
+  // t4e_last_credit_used_at falls on one of the last `days` Colombia calendar days.
+  // A credit total is never spread across the calendar.
   function recentActivity(builders, snapshotAt, days) {
     const list = Array.isArray(builders) ? builders : [];
     const windowDays = activityWindow(snapshotAt, typeof days === 'number' ? days : 7);
-    const accounts = list.filter((b) => b && b.signedUpAt);
+    const accounts = list.filter((b) => b && b.verifiedAt);
     const active = windowDays.length
       ? accounts.filter((b) => workedDays(b, windowDays).some((day) => day.on)).length
       : null;
@@ -164,9 +235,11 @@
     const opts = criteria || {};
     const needle = String(opts.search || '').trim().toLowerCase();
     const stage = opts.stage || 'all';
+    const plan = opts.plan || 'all';
     return (Array.isArray(builders) ? builders : []).filter((b) => {
       if (stage !== 'all' && b.stage !== stage) return false;
-      const haystack = [b.id, b.refKey, b.email].filter(Boolean).join(' ').toLowerCase();
+      if (plan !== 'all' && b.plan !== plan) return false;
+      const haystack = [b.id, b.channel, b.channelKey, b.refKey, b.email].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(needle);
     });
   }
@@ -220,12 +293,117 @@
     });
   }
 
-  // The close target counts verified accounts (account_verified, first per person).
+  // The close target counts Developer Network members (t4e_dn_origin), not verified accounts.
   function signupProgress(funnel, target) {
-    const step = (Array.isArray(funnel) ? funnel : []).find((x) => x.key === 'accountVerified');
+    const step = (Array.isArray(funnel) ? funnel : []).find((x) => x.key === 'dnSignedUp');
     const total = Number(step && step.value) || 0;
     const goal = Number(target) || 0;
     return { total, target: goal, percent: goal > 0 ? Math.min(100, Math.round(total / goal * 100)) : 0 };
+  }
+
+  function memberCards(builders) {
+    const list = Array.isArray(builders) ? builders : [];
+    return {
+      signedUp: list.length,
+      verified: list.filter((b) => b && b.verifiedAt).length,
+      notOnBuilderList: list.filter((b) => b && b.origin && b.origin !== 'builder_list').length,
+      paidMedia: list.filter((b) => b && b.channelKey === 'paid_media').length,
+    };
+  }
+
+  function memberFunnel(builders) {
+    const list = Array.isArray(builders) ? builders : [];
+    return {
+      dnSignedUp: list.length,
+      accountCreated: list.filter((b) => b && (b.id || b.signedUpAt)).length,
+      accountVerified: list.filter((b) => b && b.verifiedAt).length,
+      creditsUsed: list.filter((b) => b && ((Number(b.creditsUsed) > 0) || b.lastCreditUsedAt)).length,
+    };
+  }
+
+  // One builder row from a HubSpot member event. projects is null when no PostHog person matched.
+  function shapeMember(input) {
+    const src = input && typeof input === 'object' ? input : {};
+    const a = src.attributes && typeof src.attributes === 'object' ? src.attributes : {};
+    const planCode = String(a.plan || '').trim();
+    const planName = String(a.plan_name || '').trim();
+    const subscriptionStatus = String(a.subscription_status || '').trim();
+    const signedUpAt = bogotaDay(a.signup_at);
+    const verifiedAt = bogotaDay(a.verified_at);
+    const lastCreditUsedAt = bogotaDay(a.last_credit_used_at);
+    const fromEvent = /^\d{4}-\d{2}-\d{2}$/.test(String(src.eventOn || '')) ? String(src.eventOn) : '';
+    const dnSignupAt = bogotaDay(a.dn_signup_at) || fromEvent;
+    const channelKey = String(a.dn_channel || src.channel || '').trim();
+    const creditsUsed = finiteOrNull(a.credits_used);
+    const domain = String(src.domain || '').replace(/^@/, '');
+    const projects = src.projects === undefined ? null : finiteOrNull(src.projects);
+    return {
+      id: String(a.user_id || '').trim(),
+      recordId: String(src.id || ''),
+      email: domain ? `@${domain}` : '',
+      plan: planTier(planCode, planName, subscriptionStatus),
+      planName,
+      channel: channelLabel(channelKey),
+      channelKey,
+      origin: String(a.dn_origin || '').trim(),
+      signedUpAt,
+      verifiedAt,
+      dnSignupAt,
+      credits: creditsGranted(creditsUsed, finiteOrNull(a.credits_remaining)),
+      creditsUsed,
+      creditsPending: !creditsLoaded(a.dn_credits_loaded),
+      projects,
+      lastCreditUsedAt,
+      activeDays: lastCreditUsedAt ? [lastCreditUsedAt] : [],
+      subscriptionStatus,
+    };
+  }
+
+  function signupDays(builders, snapshotAt) {
+    const counts = new Map();
+    for (const b of Array.isArray(builders) ? builders : []) {
+      const day = String(b && b.dnSignupAt || '');
+      if (/^\d{4}-\d{2}-\d{2}$/.test(day)) counts.set(day, (counts.get(day) || 0) + 1);
+    }
+    if (!counts.size) return [];
+    const known = [...counts.keys()].sort();
+    const end = (activityWindow(snapshotAt, 1)[0]) || known[known.length - 1];
+    const span = eachDay(known[0], end > known[known.length - 1] ? end : known[known.length - 1]);
+    const days = span.length ? span : known;
+    return days.map((date) => ({ date, count: counts.get(date) || 0 }));
+  }
+
+  function signupChannels(builders) {
+    const counts = new Map();
+    for (const b of Array.isArray(builders) ? builders : []) {
+      const key = String(b && b.channelKey || '');
+      if (!key) continue;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .filter(([, count]) => count > 0)
+      .map(([key, count]) => ({ key, label: channelLabel(key), count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }
+
+  // GA4 sessions on the Developer Network landing. HubSpot page analytics cannot split a page by UTM.
+  function utmResults(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    const matched = list.filter((row) => /developer-network/i.test(String(row && row.landing_page || '')));
+    if (!matched.length) return { available: false, reason: list.length ? 'no_landing' : 'not_synced', rows: [] };
+    const map = new Map();
+    for (const row of matched) {
+      const source = String(row.source || '(not set)');
+      const medium = String(row.medium || '(not set)');
+      const campaign = String(row.campaign || '(not set)');
+      const key = `${source}\0${medium}\0${campaign}`;
+      const prev = map.get(key) || { source, medium, campaign, sessions: 0 };
+      prev.sessions += Number(row.sessions) || 0;
+      map.set(key, prev);
+    }
+    const out = [...map.values()].filter((row) => row.sessions > 0)
+      .sort((a, b) => b.sessions - a.sessions || a.source.localeCompare(b.source) || a.campaign.localeCompare(b.campaign));
+    return { available: out.length > 0, reason: out.length ? '' : 'no_landing', rows: out };
   }
 
   function channelBreakdown(builders) {
@@ -308,11 +486,22 @@
     isActive,
     summarizeBuilders,
     referralSteps,
+    parseUtc,
+    bogotaDay,
+    creditsGranted,
+    planTier,
+    channelLabel,
     productSteps,
     acquisitionSteps,
     activityWindow,
     workedDays,
     recentActivity,
+    memberCards,
+    memberFunnel,
+    shapeMember,
+    signupDays,
+    signupChannels,
+    utmResults,
     followUps,
     stagesOf,
     filterBuilders,
